@@ -22,9 +22,9 @@ function labelSprite(text, color) {
   const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;
   const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:texture,depthTest:false}));sprite.scale.set(.8,.27,1);return sprite;
 }
-export default function Facility3D({locations,actions,floor,current,onSelect,motion=true,showLabels=true}) {
+export default function Facility3D({locations,actions,floor,current,selectedLocation,onSelect,motion=false,showLabels=true}) {
   const hostRef=useRef(null),apiRef=useRef(null),selectRef=useRef(onSelect),stateRef=useRef({});
-  const [error,setError]=useState('');selectRef.current=onSelect;stateRef.current={current,motion,showLabels,floor};
+  const [error,setError]=useState('');selectRef.current=onSelect;stateRef.current={current,selectedLocation,motion,showLabels,floor};
   useEffect(()=>{
     const host=hostRef.current;let renderer;
     try{renderer=new THREE.WebGLRenderer({antialias:true});}catch{setError('3D graphics unavailable. Switch to the 2D map.');return;}
@@ -47,7 +47,8 @@ export default function Facility3D({locations,actions,floor,current,onSelect,mot
     for(const loc of locations){
       const p=point(loc.location_id),color=failed.has(loc.location_id)?'#f2b45e':'#70b9d6';
       const marker=addMesh(new THREE.CylinderGeometry(.12,.16,.22,20),new THREE.MeshStandardMaterial({color,emissive:color,emissiveIntensity:.2}));marker.position.copy(p);marker.userData.location=loc;pickables.push(marker);
-      const label=labelSprite(loc.location_id,color);label.position.set(p.x,.52,p.z);scene.add(label);resources.push(label.material.map,label.material);label.userData.location=loc;pickables.push(label);groups[loc.floor]?.push(marker,label);markers.push({marker,label,loc,color});
+      const halo=addMesh(new THREE.RingGeometry(.3,.42,48),new THREE.MeshBasicMaterial({color:'#ffcc66',side:THREE.DoubleSide,depthTest:false}));halo.rotation.x=-Math.PI/2;halo.position.set(p.x,.04,p.z);halo.renderOrder=3;halo.visible=false;
+      const label=labelSprite(loc.location_id,color);label.position.set(p.x,.52,p.z);scene.add(label);resources.push(label.material.map,label.material);label.userData.location=loc;pickables.push(label);groups[loc.floor]?.push(marker,label,halo);markers.push({marker,label,halo,loc,color});
     }
     for(const f of ['1','2']){const points=actions.filter(a=>locations.find(l=>l.location_id===a.location_id)?.floor===f).map(a=>point(a.location_id).setY(.08));if(points.length<2)continue;
       const geo=new THREE.BufferGeometry().setFromPoints(points),mat=new THREE.LineBasicMaterial({color:'#48d0ef',transparent:true,opacity:.8});resources.push(geo,mat);const line=new THREE.Line(geo,mat);scene.add(line);groups[f].push(line);
@@ -57,7 +58,7 @@ export default function Facility3D({locations,actions,floor,current,onSelect,mot
     const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();let down;
     const pointerDown=e=>{down=[e.clientX,e.clientY]};const click=e=>{if(!down||Math.hypot(e.clientX-down[0],e.clientY-down[1])>5)return;const rect=renderer.domElement.getBoundingClientRect();pointer.set((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1);raycaster.setFromCamera(pointer,camera);const hit=raycaster.intersectObjects(pickables.filter(o=>o.visible))[0];if(hit)selectRef.current(hit.object.userData.location);};renderer.domElement.addEventListener('pointerdown',pointerDown);renderer.domElement.addEventListener('click',click);
     const resize=()=>{const w=host.clientWidth,h=host.clientHeight;if(!w||!h)return;const halfHeight=Math.max(6.5,8.8/(w/h));camera.left=-halfHeight*w/h;camera.right=halfHeight*w/h;camera.top=halfHeight;camera.bottom=-halfHeight;camera.updateProjectionMatrix();renderer.setSize(w,h,false);};const observer=new ResizeObserver(resize);observer.observe(host);resize();
-    let frameId;const frame=()=>{controls.update();for(const {marker,label,loc,color} of markers){const visible=stateRef.current.floor==='all'||loc.floor===stateRef.current.floor;label.visible=visible&&(stateRef.current.showLabels||loc.location_id===stateRef.current.current);marker.material.color.set(loc.location_id===stateRef.current.current?'#47e0ff':color);marker.scale.setScalar(loc.location_id===stateRef.current.current?1.4:1);}for(const {particle,points,floor:f} of particles){particle.visible=stateRef.current.motion&&(stateRef.current.floor==='all'||stateRef.current.floor===f);if(stateRef.current.motion){const v=(performance.now()*.00008%1)*(points.length-1),i=Math.floor(v);particle.position.lerpVectors(points[i],points[Math.min(i+1,points.length-1)],v-i);}}renderer.render(scene,camera);frameId=requestAnimationFrame(frame);};frame();
+    let frameId;const frame=()=>{controls.update();for(const {marker,label,halo,loc,color} of markers){const visible=stateRef.current.floor==='all'||loc.floor===stateRef.current.floor;const selected=loc.location_id===stateRef.current.selectedLocation;halo.visible=visible&&selected;label.visible=visible&&(stateRef.current.showLabels||selected||loc.location_id===stateRef.current.current);marker.material.color.set(selected?'#ffcc66':loc.location_id===stateRef.current.current?'#47e0ff':color);marker.scale.setScalar(selected?1.9:loc.location_id===stateRef.current.current?1.4:1);}for(const {particle,points,floor:f} of particles){particle.visible=stateRef.current.motion&&(stateRef.current.floor==='all'||stateRef.current.floor===f);if(stateRef.current.motion){const v=(performance.now()*.00008%1)*(points.length-1),i=Math.floor(v);particle.position.lerpVectors(points[i],points[Math.min(i+1,points.length-1)],v-i);}}renderer.render(scene,camera);frameId=requestAnimationFrame(frame);};frame();
     return()=>{cancelAnimationFrame(frameId);observer.disconnect();controls.dispose();renderer.domElement.removeEventListener('pointerdown',pointerDown);renderer.domElement.removeEventListener('click',click);for(const resource of resources)resource.dispose();renderer.dispose();renderer.domElement.remove();apiRef.current=null;};
   },[locations,actions]);
   useEffect(()=>{apiRef.current?.applyFloor?.();},[floor]);
