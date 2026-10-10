@@ -88,8 +88,8 @@ export default function Facility3D({locations,actions,anomalies=[],events=[],rep
         const targetFloor=locations.find(l=>l.location_id===routeActions[target]?.location_id)?.floor;
         particle.visible=target>=0&&targetFloor===f&&(replay.floor==='all'||replay.floor===f);
         if(stateRef.current.motion){
-          if(target>=0&&routeActions[Math.floor(route.progress)]?.mission_id!==routeActions[target].mission_id)route.progress=target;
-          route.progress=Math.min(Math.max(0,target),route.progress+delta*replay.replaySpeed*2);
+          // Ease toward the next recorded visit so SPOT visibly walks between rooms.
+          if(target>=0)route.progress=THREE.MathUtils.damp(route.progress,target,3.5*replay.replaySpeed,delta);
           // Only completed segments count as arrivals; the approaching endpoint stays unvisited.
         }
         if(target>=0)for(let n=0;n<=Math.floor(route.progress);n++)visited.add(ids[n]);
