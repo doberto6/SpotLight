@@ -22,9 +22,9 @@ function labelSprite(text, color) {
   const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;
   const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:texture,depthTest:false}));sprite.scale.set(.8,.27,1);return sprite;
 }
-export default function Facility3D({locations,actions,floor,current,selectedLocation,onSelect,motion=false,showLabels=true}) {
+export default function Facility3D({locations,actions,anomalies=[],events=[],replayIndex=0,replaySpeed=1,floor,current,selectedLocation,onSelect,motion=false,showLabels=true}) {
   const hostRef=useRef(null),apiRef=useRef(null),selectRef=useRef(onSelect),stateRef=useRef({});
-  const [error,setError]=useState('');selectRef.current=onSelect;stateRef.current={current,selectedLocation,motion,showLabels,floor};
+  const [error,setError]=useState('');selectRef.current=onSelect;stateRef.current={current,selectedLocation,motion,showLabels,floor,anomalies,events,replayIndex,replaySpeed};
   useEffect(()=>{
     const host=hostRef.current;let renderer;
     try{renderer=new THREE.WebGLRenderer({antialias:true});}catch{setError('3D graphics unavailable. Switch to the 2D map.');return;}
@@ -43,22 +43,61 @@ export default function Facility3D({locations,actions,floor,current,selectedLoca
       const plane=addMesh(new THREE.PlaneGeometry(width,9),new THREE.MeshBasicMaterial({map:texture,side:THREE.DoubleSide,color:'#c4d5e5'}));plane.rotation.x=-Math.PI/2;plane.position.set(x,-.06,0);groups[f].push(slab,plane);
       const edges=new THREE.EdgesGeometry(slab.geometry),material=new THREE.LineBasicMaterial({color:'#617c96'});resources.push(edges,material);const outline=new THREE.LineSegments(edges,material);outline.position.copy(slab.position);scene.add(outline);groups[f].push(outline);
     }
-    const failed=new Set(actions.filter(a=>a.status==='FAILED').map(a=>a.location_id));
+    const routeActions=[...actions].sort((a,b)=>String(a.timestamp||'').localeCompare(String(b.timestamp||''))||a.mission_id.localeCompare(b.mission_id)||Number(a.sequence)-Number(b.sequence));
+    const failed=new Set(routeActions.filter(a=>a.status==='FAILED').map(a=>a.location_id));
+    const palette=getComputedStyle(document.documentElement);
+    const severityRank={CRITICAL:4,HIGH:3,MEDIUM:2,LOW:1};
+    const visitedColor=loc=>{
+      const reachedActions=new Set(routeActions.slice(0,target<0?0:Math.floor(particles[0]?.progress||0)+1).map(a=>a.action_id));
+      const findings=stateRef.current.anomalies.filter(a=>a.location_id===loc.location_id&&reachedActions.has(a.action_id));
+      const severity=findings.reduce((highest,a)=>(severityRank[a.severity]||0)>(severityRank[highest]||0)?a.severity:highest,'');
+      return severity?palette.getPropertyValue('--severity-'+severity.toLowerCase()).trim():routeActions.some(a=>reachedActions.has(a.action_id)&&a.location_id===loc.location_id&&a.status==='FAILED')?'#ef5350':'#45d483';
+    };
     for(const loc of locations){
       const p=point(loc.location_id),color=failed.has(loc.location_id)?'#f2b45e':'#70b9d6';
       const marker=addMesh(new THREE.CylinderGeometry(.12,.16,.22,20),new THREE.MeshStandardMaterial({color,emissive:color,emissiveIntensity:.2}));marker.position.copy(p);marker.userData.location=loc;pickables.push(marker);
       const halo=addMesh(new THREE.RingGeometry(.3,.42,48),new THREE.MeshBasicMaterial({color:'#ffcc66',side:THREE.DoubleSide,depthTest:false}));halo.rotation.x=-Math.PI/2;halo.position.set(p.x,.04,p.z);halo.renderOrder=3;halo.visible=false;
       const label=labelSprite(loc.location_id,color);label.position.set(p.x,.52,p.z);scene.add(label);resources.push(label.material.map,label.material);label.userData.location=loc;pickables.push(label);groups[loc.floor]?.push(marker,label,halo);markers.push({marker,label,halo,loc,color});
     }
-    for(const f of ['1','2']){const points=actions.filter(a=>locations.find(l=>l.location_id===a.location_id)?.floor===f).map(a=>point(a.location_id).setY(.08));if(points.length<2)continue;
-      const geo=new THREE.BufferGeometry().setFromPoints(points),mat=new THREE.LineBasicMaterial({color:'#48d0ef',transparent:true,opacity:.8});resources.push(geo,mat);const line=new THREE.Line(geo,mat);scene.add(line);groups[f].push(line);
-      const particle=addMesh(new THREE.SphereGeometry(.07,12,12),new THREE.MeshBasicMaterial({color:'#e5fbff'}));groups[f].push(particle);particles.push({particle,points,floor:f});
+    for(const f of ['1','2']){const ids=routeActions.map(a=>a.location_id);const points=ids.map(id=>point(id).setY(.08));if(!points.length)continue;
+      const segments=[];for(let n=1;n<points.length;n++){if(routeActions[n-1].mission_id===routeActions[n].mission_id&&[ids[n-1],ids[n]].every(id=>locations.find(l=>l.location_id===id)?.floor===f))segments.push(points[n-1],points[n]);}
+      const geo=new THREE.BufferGeometry().setFromPoints(segments),mat=new THREE.LineBasicMaterial({color:'#48d0ef',transparent:true,opacity:.8});resources.push(geo,mat);const line=new THREE.LineSegments(geo,mat);scene.add(line);groups[f].push(line);
+      const particle=addMesh(new THREE.SphereGeometry(.07,12,12),new THREE.MeshBasicMaterial({color:'#e5fbff'}));particle.position.copy(points[0]);groups[f].push(particle);particles.push({particle,points,ids,floor:f,progress:0});
     }
     const applyFloor=()=>{for(const [f,objects] of Object.entries(groups))for(const o of objects)o.visible=stateRef.current.floor==='all'||stateRef.current.floor===f;};apiRef.current.applyFloor=()=>{applyFloor();reset();};applyFloor();
     const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();let down;
     const pointerDown=e=>{down=[e.clientX,e.clientY]};const click=e=>{if(!down||Math.hypot(e.clientX-down[0],e.clientY-down[1])>5)return;const rect=renderer.domElement.getBoundingClientRect();pointer.set((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1);raycaster.setFromCamera(pointer,camera);const hit=raycaster.intersectObjects(pickables.filter(o=>o.visible))[0];if(hit)selectRef.current(hit.object.userData.location);};renderer.domElement.addEventListener('pointerdown',pointerDown);renderer.domElement.addEventListener('click',click);
     const resize=()=>{const w=host.clientWidth,h=host.clientHeight;if(!w||!h)return;const halfHeight=Math.max(6.5,8.8/(w/h));camera.left=-halfHeight*w/h;camera.right=halfHeight*w/h;camera.top=halfHeight;camera.bottom=-halfHeight;camera.updateProjectionMatrix();renderer.setSize(w,h,false);};const observer=new ResizeObserver(resize);observer.observe(host);resize();
-    let frameId;const frame=()=>{controls.update();for(const {marker,label,halo,loc,color} of markers){const visible=stateRef.current.floor==='all'||loc.floor===stateRef.current.floor;const selected=loc.location_id===stateRef.current.selectedLocation;halo.visible=visible&&selected;label.visible=visible&&(stateRef.current.showLabels||selected||loc.location_id===stateRef.current.current);marker.material.color.set(selected?'#ffcc66':loc.location_id===stateRef.current.current?'#47e0ff':color);marker.scale.setScalar(selected?1.9:loc.location_id===stateRef.current.current?1.4:1);}for(const {particle,points,floor:f} of particles){particle.visible=stateRef.current.motion&&(stateRef.current.floor==='all'||stateRef.current.floor===f);if(stateRef.current.motion){const v=(performance.now()*.00008%1)*(points.length-1),i=Math.floor(v);particle.position.lerpVectors(points[i],points[Math.min(i+1,points.length-1)],v-i);}}renderer.render(scene,camera);frameId=requestAnimationFrame(frame);};frame();
+    const visited=new Set();let lastFrame=performance.now(),frameId,lastIndex=-1,target=-1;
+    const frame=()=>{
+      const now=performance.now(),delta=Math.min((now-lastFrame)/1000,.1);lastFrame=now;controls.update();
+      const replay=stateRef.current;
+      const elapsed=replay.events.slice(0,replay.replayIndex+1);
+      const actionId=[...elapsed].reverse().find(e=>e.details?.action_id)?.details.action_id;
+      target=routeActions.findIndex(a=>a.action_id===actionId);
+      if(replay.replayIndex<lastIndex||(!replay.motion&&replay.replayIndex!==lastIndex)){visited.clear();for(const route of particles)route.progress=Math.max(0,target);}
+      lastIndex=replay.replayIndex;
+      for(const route of particles){
+        const {particle,points,ids,floor:f}=route;
+        const targetFloor=locations.find(l=>l.location_id===routeActions[target]?.location_id)?.floor;
+        particle.visible=target>=0&&targetFloor===f&&(replay.floor==='all'||replay.floor===f);
+        if(stateRef.current.motion){
+          if(target>=0&&routeActions[Math.floor(route.progress)]?.mission_id!==routeActions[target].mission_id)route.progress=target;
+          route.progress=Math.min(Math.max(0,target),route.progress+delta*replay.replaySpeed*2);
+          // Only completed segments count as arrivals; the approaching endpoint stays unvisited.
+        }
+        if(target>=0)for(let n=0;n<=Math.floor(route.progress);n++)visited.add(ids[n]);
+        const i=Math.floor(route.progress);particle.position.lerpVectors(points[i],points[Math.min(i+1,points.length-1)],route.progress-i);
+      }
+      for(const {marker,label,halo,loc,color} of markers){
+        const visible=stateRef.current.floor==='all'||loc.floor===stateRef.current.floor;
+        const selected=loc.location_id===stateRef.current.selectedLocation,wasVisited=visited.has(loc.location_id);
+        halo.visible=visible&&selected;label.visible=visible&&(stateRef.current.showLabels||selected||wasVisited);
+        const tint=wasVisited?visitedColor(loc):'#70b9d6';marker.material.color.set(tint);marker.material.emissive.set(tint);
+        marker.scale.setScalar(selected?1.9:wasVisited?1.25:1);
+      }
+      renderer.render(scene,camera);frameId=requestAnimationFrame(frame);
+    };frame();
     return()=>{cancelAnimationFrame(frameId);observer.disconnect();controls.dispose();renderer.domElement.removeEventListener('pointerdown',pointerDown);renderer.domElement.removeEventListener('click',click);for(const resource of resources)resource.dispose();renderer.dispose();renderer.domElement.remove();apiRef.current=null;};
   },[locations,actions]);
   useEffect(()=>{apiRef.current?.applyFloor?.();},[floor]);
