@@ -1,0 +1,26 @@
+[
+  {
+    "name": "roof_truss",
+    "bytes": 60856,
+    "triangles": 908,
+    "meshes": 2,
+    "author": "SPOTlight original geometry",
+    "license": "Project license"
+  },
+  {
+    "name": "industrial_luminaire",
+    "bytes": 12084,
+    "triangles": 128,
+    "meshes": 3,
+    "author": "SPOTlight original geometry",
+    "license": "Project license"
+  },
+  {
+    "name": "pipe_hanger",
+    "bytes": 8328,
+    "triangles": 92,
+    "meshes": 2,
+    "author": "SPOTlight original geometry",
+    "license": "Project license"
+  }
+]

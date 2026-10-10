@@ -1,0 +1,22 @@
+[
+  {
+    "name": "service_manifold",
+    "bytes": 86468,
+    "triangles": 1912,
+    "meshes": 4,
+    "portsYUp": [
+      [
+        -0.65,
+        0.3,
+        0
+      ],
+      [
+        0.65,
+        0.3,
+        0
+      ]
+    ],
+    "author": "SPOTlight original geometry",
+    "license": "Project license"
+  }
+]

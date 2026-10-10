@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 // Small deterministic tiles: no network dependency, subtle pores and aggregate,
 // and linear roughness/normal data rather than color used as a lighting map.
-export function concreteMaps(resources) {
+export function concreteMaps(resources,repeat=[20,12],{joints=true,base=165,normalStrength=.32}={}) {
   const size=256,heights=new Float32Array(size*size);let seed=713;
   for(let i=0;i<heights.length;i++){seed=(Math.imul(seed,1664525)+1013904223)>>>0;heights[i]=(seed%101)/100;}
   const make=(paint,color=false)=>{
@@ -12,14 +12,14 @@ export function concreteMaps(resources) {
       const i=y*size+x,rgb=paint(x,y,i);pixels.data.set([...rgb,255],i*4);
     }
     ctx.putImageData(pixels,0,0);
-    const texture=new THREE.CanvasTexture(canvas);texture.wrapS=texture.wrapT=THREE.RepeatWrapping;texture.repeat.set(20,12);texture.anisotropy=4;
+    const texture=new THREE.CanvasTexture(canvas);texture.wrapS=texture.wrapT=THREE.RepeatWrapping;texture.repeat.set(...repeat);texture.anisotropy=4;
     if(color)texture.colorSpace=THREE.SRGBColorSpace;
     resources.push(texture);return texture;
   };
   const map=make((x,y,i)=>{
-    const joint=x<1||y<1?-.15:0;
+    const joint=joints&&(x<1||y<1)?-.15:0;
     const clouds=Math.sin(x*.065)*Math.cos(y*.04)*4;
-    const v=165+heights[i]*10+clouds+joint*120;
+    const v=base+heights[i]*10+clouds+joint*120;
     return [v,v+1,v-2];
   },true);
   const roughnessMap=make((x,y,i)=>{const v=225+heights[i]*24;return [v,v,v]});
@@ -28,5 +28,5 @@ export function concreteMaps(resources) {
     const dy=heights[((y+1)%size)*size+x]-heights[((y+size-1)%size)*size+x];
     return [128+dx*12,128+dy*12,254];
   });
-  return {map,roughnessMap,normalMap,normalScale:new THREE.Vector2(.32,.32)};
+  return {map,roughnessMap,normalMap,normalScale:new THREE.Vector2(normalStrength,normalStrength)};
 }

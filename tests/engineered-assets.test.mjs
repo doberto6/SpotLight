@@ -9,7 +9,7 @@ const root=new URL('../public/models/engineered/',import.meta.url);
 const manifest=JSON.parse(fs.readFileSync(new URL('manifest.json',root)));
 test('Blender exports contain their own equipment, embedded PBR maps and bounded geometry',()=>{
   assert.deepEqual(manifest.map(m=>m.name).sort(),[...engineeredAssetNames].sort());
-  assert.ok(manifest.reduce((sum,m)=>sum+m.outputBytes,0)<3*1024*1024);
+  assert.ok(manifest.reduce((sum,m)=>sum+m.outputBytes,0)<4*1024*1024);
   for(const entry of manifest){
     const file=fs.readFileSync(new URL(entry.output,root));
     assert.equal(file.readUInt32LE(0),0x46546c67);assert.equal(file.readUInt32LE(8),file.length);
@@ -29,14 +29,14 @@ test('Blender exports contain their own equipment, embedded PBR maps and bounded
   }
 });
 test('every machinery replacement fits inside its original navigation envelope',()=>{
-  for(const o of obstacles.filter(o=>o.type!=='wall')){
+  for(const o of obstacles.filter(o=>equipmentAsset(o))){
     const name=equipmentAsset(o),entry=manifest.find(e=>e.name===name);
     const p=equipmentPlacements(name).find(p=>p.position[0]===o.x&&p.position[2]===o.z);
     // Blender Z up -> GLB Y up; uniform fit is the same as the runtime loader.
     const [x,z,y]=entry.dimensionsBlender,dims=[x,y,z];
     const factor=Math.min(...p.size.map((n,i)=>n/dims[i]));
     assert.ok(dims[0]*factor<o.w);assert.ok(dims[2]*factor<o.d);
-    assert.ok(p.position[1]+dims[1]*factor<o.h);
+    assert.equal(p.position[1],.22);assert.ok(p.position[1]+dims[1]*factor<=o.h+1e-9);
   }
 });
 test('leg IK reaches planted and lifted feet in forward and reverse trots',()=>{

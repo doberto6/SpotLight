@@ -1,0 +1,22 @@
+{
+  "manualResume": {
+    "pausedAt": 1,
+    "oneRecoveryPlan": true,
+    "noTeleport": true
+  },
+  "demoWallSeconds": 75.007,
+  "render": {
+    "backend": "ANGLE (Apple, ANGLE Metal Renderer: Apple M3 Pro, Unspecified Version)",
+    "fps": 60.01096903308413,
+    "cpuMs": 1.9780039828840308,
+    "calls": 542,
+    "triangles": 494385
+  },
+  "duration": 75,
+  "missionChangesRoute": true,
+  "mobileOverflow": false,
+  "assets": 15,
+  "staticBuffersUnchanged": true,
+  "errors": [],
+  "warnings": []
+}

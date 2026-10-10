@@ -73,5 +73,35 @@
     "author": "SPOTlight project \u2014 original procedural geometry",
     "license": "Project license",
     "textureLimit": 128
+  },
+  {
+    "name": "compressor",
+    "output": "compressor.glb",
+    "outputBytes": 524712,
+    "triangles": 7664,
+    "meshes": 7,
+    "dimensionsBlender": [
+      3.8000000715255737,
+      2.299999952316284,
+      2.1900000497698784
+    ],
+    "author": "SPOTlight project \u2014 original procedural geometry",
+    "license": "Project license",
+    "textureLimit": 128
+  },
+  {
+    "name": "heat_exchanger",
+    "output": "heat_exchanger.glb",
+    "outputBytes": 441820,
+    "triangles": 6248,
+    "meshes": 6,
+    "dimensionsBlender": [
+      5.000000238418579,
+      2.200000047683716,
+      2.590784542262554
+    ],
+    "author": "SPOTlight project \u2014 original procedural geometry",
+    "license": "Project license",
+    "textureLimit": 128
   }
 ]

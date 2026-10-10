@@ -1,188 +1,150 @@
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
-import {obstacles,bounds,worldPoint} from './replay-engine.mjs';
-import {engineeredAssetNames,equipmentAsset,equipmentPlacements} from './engineered-assets.mjs';
+import {obstacles,floors,rooms,imageToWorld,equipment} from './facility-layout.mjs';
+import {engineeredAssetNames} from './engineered-assets.mjs';
 import {concreteMaps} from './plant-surfaces.js';
+import {wallFootprint,wallSurface} from './facility-structure.mjs';
+import {planRoof,clerestoryOpenings,deckRibs} from './facility-roof.mjs';
+import {steelSection} from './steel-section.js';
+import {servicePlacements,servicePorts,headerTap} from './service-connections.mjs';
+export const industrialAssetNames=['factory_modular_kit','industrial_electrical_box','industrial_pipes_pack','large_modular_pipes_metal'];
 
-export const industrialAssetNames=['factory_modular_kit','industrial_electrical_box','industrial_factory_with_towers_and_pipes','industrial_pipes_pack','large_modular_pipes_metal'];
+export function createReplayEnvironment(scene,resources,locations,onAssets=()=>{}){
+  let disposed=false,currentFloor='1';const groups={1:new THREE.Group(),2:new THREE.Group()},solids=[],batches=new Map(),fallbacks=new Map(),upperWalls=[],decks=[],roofGroups={},structuralPlacements={roof_truss:[],industrial_luminaire:[],pipe_hanger:[]},roofPlan=planRoof();Object.entries(groups).forEach(([id,g])=>{g.name='Floor '+id;scene.add(g);roofGroups[id]=new THREE.Group();g.add(roofGroups[id]);});
+  const keep=r=>(resources.push(r),r),mat=(color,roughness=.65,metalness=.4,extra={})=>keep(new THREE.MeshStandardMaterial({color,roughness,metalness,...extra}));
+  const m={steel:mat('#4f626b',.4,.8),silver:mat('#a1b1b7',.32,.85),blue:mat('#397e87',.48,.55),yellow:mat('#caaa47',.6,.35),dark:mat('#303a40'),wall:mat('#d5d5c8',.89,.02,concreteMaps(resources,[.55,.55],{joints:false,base:190,normalStrength:.15})),frame:mat('#8d9995',.58,.55),red:mat('#a54d3c'),light:mat('#eef5ec',.4,.1,{emissive:'#dbe9e4',emissiveIntensity:1.2}),floor:mat('#c2c7c5',.72,.02,concreteMaps(resources,[.25,.25],{normalStrength:.16})),glass:mat('#b1cecc',.24,.1,{transparent:true,opacity:.3,depthWrite:false})};
+  const geos={column:keep(steelSection()),beam:keep(steelSection(.24,.32,.03,true).translate(0,-.5,0)),box:keep(new THREE.BoxGeometry(1,1,1)),cylinder:keep(new THREE.CylinderGeometry(1,1,1,20)),sphere:keep(new THREE.SphereGeometry(1,16,10)),torus:keep(new THREE.TorusGeometry(1,.1,8,20))};
+  const add=o=>{groups[currentFloor].add(o);return o;};
+  function shape(kind,size,pos,material,rotation=[0,0,0],parent=null){const mesh=new THREE.Mesh(geos[kind],material);mesh.position.set(...pos);mesh.scale.set(...size);mesh.rotation.set(...rotation);mesh.updateMatrix();const k=currentFloor+kind+material.uuid+(parent?.uuid||'');if(!batches.has(k))batches.set(k,{kind,material,floor:currentFloor,parent,matrices:[]});batches.get(k).matrices.push(mesh.matrix.clone());return mesh;}
+  const box=(size,pos,material,parent)=>shape('box',size,pos,material,[0,0,0],parent);
+  const pipe=(a,b,r=.1,material=m.silver,parent=null)=>{const v=new THREE.Vector3(...a),q=new THREE.Vector3(...b),axis=q.clone().sub(v),mesh=new THREE.Mesh(geos.cylinder,material);mesh.position.copy(v.add(q).multiplyScalar(.5));mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),axis.clone().normalize());mesh.scale.set(r,axis.length(),r);mesh.updateMatrix();const k=currentFloor+'pipe'+material.uuid+(parent?.uuid||'');if(!batches.has(k))batches.set(k,{kind:'cylinder',material,floor:currentFloor,parent,matrices:[]});batches.get(k).matrices.push(mesh.matrix.clone());};
+  const beamKeys=new Set(),trussKeys=new Set();
+  const spanKey=(a,b,y)=>currentFloor+'|'+y+'|'+[a,b].map(p=>p.x.toFixed(4)+','+p.z.toFixed(4)).sort().join('|');
+  const beam=(a,b,y,parent)=>{const keySpan=spanKey(a,b,y);if(beamKeys.has(keySpan))return;beamKeys.add(keySpan);const start=new THREE.Vector3(a.x,y,a.z),end=new THREE.Vector3(b.x,y,b.z),delta=end.clone().sub(start);if(delta.length()<.01)return;const mesh=new THREE.Mesh(geos.beam,m.frame);mesh.position.copy(start.add(end).multiplyScalar(.5));mesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3(0,1,0),delta.clone().normalize(),new THREE.Vector3(0,1,0).cross(delta.clone().normalize())));mesh.scale.y=delta.length();mesh.updateMatrix();const key=currentFloor+'beam'+parent.uuid;if(!batches.has(key))batches.set(key,{kind:'beam',material:m.frame,floor:currentFloor,parent,matrices:[]});batches.get(key).matrices.push(mesh.matrix.clone());};
+  const roundedPipe=(points,r,material)=>{
+    const vectors=points.map(p=>new THREE.Vector3(...p)),curve=new THREE.CurvePath();let from=vectors[0];
+    for(let i=1;i<vectors.length-1;i++){const p=vectors[i],before=vectors[i-1],after=vectors[i+1],radius=Math.min(.25,p.distanceTo(before)*.25,p.distanceTo(after)*.25),entry=p.clone().add(before.clone().sub(p).normalize().multiplyScalar(radius)),exit=p.clone().add(after.clone().sub(p).normalize().multiplyScalar(radius));
+      if(from.distanceTo(entry)>.001)curve.add(new THREE.LineCurve3(from,entry));curve.add(new THREE.QuadraticBezierCurve3(entry,p,exit));from=exit;
+    }
+    if(from.distanceTo(vectors.at(-1))>.001)curve.add(new THREE.LineCurve3(from,vectors.at(-1)));
+    const geo=keep(new THREE.TubeGeometry(curve,Math.max(16,Math.ceil(curve.getLength()*2)),r,10,false)),mesh=new THREE.Mesh(geo,material);mesh.castShadow=mesh.receiveShadow=true;add(mesh);
+  };
+  for(const f of floors){currentFloor=f.id;const outline=new THREE.Shape(f.outline.map(p=>{const q=imageToWorld(p);return new THREE.Vector2(q.x,-q.z);}));const geo=keep(new THREE.ExtrudeGeometry(outline,{depth:.2,bevelEnabled:false})),floor=add(new THREE.Mesh(geo,m.floor));floor.rotation.x=-Math.PI/2;floor.receiveShadow=true;floor.position.y=-.2;
+    const wallRects=obstacles.filter(o=>o.type==='wall'&&o.floor===f.id),footprint=wallFootprint(wallRects),outside=wallRects.filter(o=>o.exterior),openings=clerestoryOpenings(f.id),outerFootprint=wallFootprint(outside),windowBand=wallFootprint(outside,openings);
+    const buildWall=(plan,low,high,options,parent=groups[f.id])=>{const data=wallSurface(plan,low,high,options),g=keep(new THREE.BufferGeometry());g.setAttribute('position',new THREE.Float32BufferAttribute(data.positions,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(data.normals,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(data.uvs,2));g.setIndex(data.indices);const mesh=new THREE.Mesh(g,m.wall);parent.add(mesh);mesh.castShadow=mesh.receiveShadow=true;return mesh;};
+    buildWall(footprint,-.035,1.35,{bottom:true,top:true});
+    const upper=new THREE.Group();add(upper);upperWalls.push(upper);
+    buildWall(footprint,1.35,3.5,{bottom:false,top:true},upper);
+    buildWall(outerFootprint,3.5,3.9,{bottom:false,top:true},upper);
+    buildWall(windowBand,3.9,5.6,{bottom:false,top:false},upper);
+    buildWall(outerFootprint,5.6,6.4,{bottom:true,top:true},upper);
+    for(const w of openings){const width=w.horizontal?w.w:w.d;box(w.horizontal?[width-.06,1.64,.024]:[.024,1.64,width-.06],[w.x,4.75,w.z],m.glass,upper);for(const sign of [-1,1]){box(w.horizontal?[width,.045,.075]:[.075,.045,width],[w.x,sign<0?3.92:5.58,w.z],m.frame,upper);box(w.horizontal?[.045,1.7,.075]:[.075,1.7,.045],[w.x+(w.horizontal?sign*width/2:0),4.75,w.z+(w.horizontal?0:sign*width/2)],m.frame,upper);}}
+    const deckMaterial=mat('#929e9d',.64,.65,{side:THREE.DoubleSide}),deckRoot=new THREE.Group();add(deckRoot);const deck=new THREE.Mesh(keep(new THREE.ExtrudeGeometry(outline,{depth:.1,bevelEnabled:false})),deckMaterial);deckRoot.add(deck);deck.rotation.x=-Math.PI/2;deck.position.y=7.4;deck.receiveShadow=true;decks.push({root:deckRoot,material:deckMaterial});
+    for(const rib of deckRibs(f))box([.07,.045,rib.length],[rib.x,7.505,rib.z],deckMaterial,deckRoot);
+    for(const p of roofPlan.columns.filter(p=>p.floor===f.id)){shape('column',[1,6.4,1],[p.x,0,p.z],m.frame);box([.2,.06,.2],[p.x,.035,p.z],m.silver);}
 
-export function createReplayEnvironment(scene,resources,locations,onAssets=()=>{}) {
-  let disposed=false,activeFallback=null;const solids=[],geometryCache=new Map(),batches=new Map(),equipmentFallbacks=new Map();
-  const keep=r=>{resources.push(r);return r;};
-  const material=(color,roughness=.65,metalness=.25,extra={})=>keep(new THREE.MeshStandardMaterial({color,roughness,metalness,...extra}));
-  const m={steel:material('#445968',.35,.8),silver:material('#a0adb4',.3,.8),blue:material('#397680',.5,.55),green:material('#597666',.6,.4),yellow:material('#d4a63d',.5,.35),dark:material('#20313e'),wall:material('#b3b6ad',.95,.02),red:material('#ab4a3e',.5,.45),black:material('#222c34'),glass:material('#89b8bd',.18,.25,{transparent:true,opacity:.24,depthWrite:false}),light:material('#d5edee',.4,.1,{emissive:'#a5e8eb',emissiveIntensity:1.1}),status:material('#7adac9',.3,.2,{emissive:'#4fd2b6',emissiveIntensity:1.5})};
-  function geo(kind){if(!geometryCache.has(kind))geometryCache.set(kind,keep(kind==='box'?new THREE.BoxGeometry(1,1,1):kind==='cylinder'?new THREE.CylinderGeometry(1,1,1,20):kind==='sphere'?new THREE.SphereGeometry(1,16,10):new THREE.TorusGeometry(1,.12,8,24)));return geometryCache.get(kind);}
-  function batch(kind,mat,matrix){const key=kind+':'+mat.uuid+':'+(activeFallback?.uuid||'static');if(!batches.has(key))batches.set(key,{geometry:geo(kind),material:mat,matrices:[],group:activeFallback});batches.get(key).matrices.push(matrix.clone());}
-  // Repeated procedural details share geometry/material and become GPU instances.
-  function shape(kind,size,pos,mat,rotation=[0,0,0],collision=false){
-    const mesh=new THREE.Mesh(geo(kind),mat);mesh.position.set(...pos);mesh.scale.set(...size);mesh.rotation.set(...rotation);mesh.updateMatrix();
-    if(collision){mesh.castShadow=true;mesh.receiveShadow=true;scene.add(mesh);solids.push(mesh);return mesh;}
-    batch(kind,mat,mesh.matrix);return mesh;
   }
-  const box=(size,pos,mat,collision=false)=>shape('box',size,pos,mat,[0,0,0],collision);
-  const cyl=(r,h,pos,mat,rotation=[0,0,0])=>shape('cylinder',[r,h,r],pos,mat,rotation);
-  const pipe=(a,b,r,mat=m.silver)=>{const start=new THREE.Vector3(...a),end=new THREE.Vector3(...b),axis=end.clone().sub(start),mesh=new THREE.Mesh(geo('cylinder'),mat);mesh.position.copy(start.add(end).multiplyScalar(.5));mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),axis.clone().normalize());mesh.scale.set(r,axis.length(),r);mesh.updateMatrix();batch('cylinder',mat,mesh.matrix);};
-  function sign(text,x,y,z,width=3,color='#d6ac4d',yaw=0){
-    const c=document.createElement('canvas');c.width=512;c.height=128;const ctx=c.getContext('2d');ctx.fillStyle='#152a36';ctx.fillRect(0,0,512,128);ctx.fillStyle=color;ctx.fillRect(0,0,10,128);ctx.fillStyle='#edf5ed';ctx.font='bold 34px Arial';ctx.textAlign='center';ctx.fillText(text,260,77,470);
-    const texture=keep(new THREE.CanvasTexture(c));texture.colorSpace=THREE.SRGBColorSpace;const material=keep(new THREE.MeshBasicMaterial({map:texture,side:THREE.DoubleSide}));const plane=keep(new THREE.PlaneGeometry(width,width/4)),mesh=new THREE.Mesh(plane,material);mesh.position.set(x,y,z);mesh.rotation.y=yaw;scene.add(mesh);
-  }
-  const concrete=material('#c4c5bc',1,.02,concreteMaps(resources));
-  const floor=new THREE.Mesh(keep(new THREE.BoxGeometry(80,.2,45)),concrete);floor.position.y=-.1;floor.receiveShadow=true;scene.add(floor);
-  // Operator pathways and bay boundaries replace the floor-plan poster on the ground.
-  const marking=material('#d8c27c',.8,.05),path=material('#628f88',.9,.05);
-  box([78,.012,2.7],[0,.012,0],path);
-  for(const z of [-1.5,1.5])box([78,.013,.09],[0,.017,z],marking);
-  for(const x of [-20,15]){box([2.4,.012,43],[x,.013,0],path);for(const side of [-1.3,1.3])box([.08,.013,43],[x+side,.019,0],marking);}
-  for(let x=-38;x<39;x+=4){box([1,.014,.12],[x,.018,-2],marking);box([1,.014,.12],[x,.018,2],marking);}
-  function wall(x,z,w,d,h=3.5){
-    box([w,1.1,d],[x,.55,z],m.wall,true);box([w,.45,d],[x,h-.225,z],m.steel,true);
-    box([w,1.95,d*.4],[x,2.075,z],m.glass);
-    const count=Math.max(1,Math.round(Math.max(w,d)/2.5));for(let i=0;i<=count;i++){const f=i/count-.5;box([w>d?.07:w,2,d>w?.07:d],[x+(w>d?w*f:0),2.05,z+(d>w?d*f:0)],m.steel);}
-    box([w,.12,d+.04],[x,1.12,z],m.steel);box([w,.07,d+.02],[x,.12,z],m.dark);
-  }
-  const cabinetPlacements=[];
-  const shadowCanvas=document.createElement('canvas');shadowCanvas.width=shadowCanvas.height=64;const shadowCtx=shadowCanvas.getContext('2d'),gradient=shadowCtx.createRadialGradient(32,32,7,32,32,32);gradient.addColorStop(0,'#00000070');gradient.addColorStop(1,'#00000000');shadowCtx.fillStyle=gradient;shadowCtx.fillRect(0,0,64,64);
-  const shadowMaterial=keep(new THREE.MeshBasicMaterial({map:keep(new THREE.CanvasTexture(shadowCanvas)),transparent:true,depthWrite:false})),shadowGeometry=keep(new THREE.PlaneGeometry(1,1));
-  for(const o of obstacles){
-    if(o.type==='wall'){wall(o.x,o.z,o.w,o.d,o.h);continue;}
-    // Original collision volumes define footprints for every equipment bay.
-    const proxy=new THREE.Mesh(geo('box'),m.dark);proxy.position.set(o.x,o.h/2,o.z);proxy.scale.set(o.w,o.h,o.d);proxy.visible=false;scene.add(proxy);solids.push(proxy);
-    const contact=new THREE.Mesh(shadowGeometry,shadowMaterial);contact.rotation.x=-Math.PI/2;contact.scale.set(o.w+2,o.d+2,1);contact.position.set(o.x,.009,o.z);scene.add(contact);
-    box([o.w+.1,.16,o.d+.1],[o.x,.08,o.z],m.dark);
-    for(const side of [-1,1])box([o.w,.015,.06],[o.x,.015,o.z+side*(o.d/2+.08)],marking);
-    const asset=equipmentAsset(o);
-    if(!equipmentFallbacks.has(asset)){const group=new THREE.Group();scene.add(group);equipmentFallbacks.set(asset,group);}
-    activeFallback=equipmentFallbacks.get(asset);
-    if(o.type==='generator'){
-      cyl(.83,2.8,[o.x,1.1,o.z],m.blue,[Math.PI/2,0,0]);cyl(.92,.15,[o.x,1.1,o.z-1.3],m.silver,[Math.PI/2,0,0]);
-      for(let i=0;i<7;i++)cyl(.85,.05,[o.x,1.1,o.z-1+i*.34],m.steel,[Math.PI/2,0,0]);
-      box([1.5,.5,1],[o.x,1.7,o.z],m.blue);box([1.4,.07,3.1],[o.x,.28,o.z],m.green);
-      for(const dx of [-.55,.55])box([.2,.45,2.5],[o.x+dx,.35,o.z],m.steel);
-      sign('TURBINE / GEN-'+(o.x<0?'01':'02'),o.x,2.2,o.z+1.9,2.5);
-    }else if(o.x< -20){
-      cyl(.83,1.7,[o.x,1.25,o.z],m.silver);shape('sphere',[.83,.32,.83],[o.x,2.1,o.z],m.silver);shape('sphere',[.83,.32,.83],[o.x,.4,o.z],m.silver);
-      pipe([o.x,2.25,o.z],[o.x+.9,2.25,o.z],.13);pipe([o.x+.9,2.25,o.z],[o.x+.9,.65,o.z],.13);cyl(.22,.07,[o.x+.9,1.3,o.z],m.red);
-      sign('BOILER / VESSEL',o.x,2.6,o.z+1.22,2.8);
-    }else if(o.x<0){
-      for(const dx of [-.65,.65]){
-        cyl(.3,1.2,[o.x+dx,.55,o.z],m.blue,[Math.PI/2,0,0]);cyl(.4,.4,[o.x+dx,.52,o.z+.75],m.green,[Math.PI/2,0,0]);
-        for(let i=0;i<6;i++)cyl(.33,.04,[o.x+dx,.55,o.z-.45+i*.15],m.steel,[Math.PI/2,0,0]);
-        pipe([o.x+dx,.7,o.z+.8],[o.x+dx,1.8,o.z+.8],.12);shape('torus',[.2,.2,.2],[o.x+dx,1.45,o.z+.8],m.red,[Math.PI/2,0,0]);
-      }
-      sign('COOLING / PUMPS',o.x,2.2,o.z+1.22,2.8);
-    }else if(o.x<10){
-      cabinetPlacements.push([o.x-.62,0,o.z],[o.x+.62,0,o.z]);
-      for(const dx of [-.66,.66]){box([1.2,2.2,1.3],[o.x+dx,1.15,o.z],m.green);box([1,.95,.035],[o.x+dx,1.6,o.z+.67],m.dark);box([.45,.32,.035],[o.x+dx,1.7,o.z+.7],m.status);for(let i=0;i<3;i++)box([.8,.07,.04],[o.x+dx,.55+i*.15,o.z+.67],m.black);}
-      sign('SWITCHGEAR / HV',o.x,2.6,o.z+1.22,2.8);
+  // Shared collision footprints are also the rendered partitions and equipment foundations.
+  for(const o of obstacles){currentFloor=o.floor;
+    const proxy=add(new THREE.Mesh(geos.box,m.wall));proxy.position.set(o.x,o.h/2,o.z);proxy.scale.set(o.w,o.h,o.d);proxy.userData.floor=o.floor;proxy.userData.type=o.type;proxy.userData.exterior=o.exterior;solids.push(proxy);
+    if(o.type==='wall'){
+      proxy.visible=false;proxy.scale.y=1.35;proxy.position.y=.675;continue;
+    }
+    proxy.visible=false;box([o.w,.22,o.d],[o.x,.11,o.z],m.wall);
+    const fallback=new THREE.Group();add(fallback);fallbacks.set(o,fallback);
+    if(o.asset==='pipes'){
+      for(const y of [.6,1.05,1.5]){pipe([o.x-o.w/2,y,o.z],[o.x+o.w/2,y,o.z],.16,m.silver,fallback);for(let x=o.x-o.w/2+.5;x<o.x+o.w/2;x+=2.6){shape('cylinder',[.22,.08,.22],[x,y,o.z],m.steel,[0,0,Math.PI/2],fallback);}}
+      for(let x=o.x-o.w/2;x<=o.x+o.w/2;x+=4)box([.14,1.9,o.d],[x,.95,o.z],m.steel,fallback);
+    }else if(o.asset==='valves'){
+      for(const dx of [-.5,.5]){pipe([o.x+dx,.3,o.z-1],[o.x+dx,1.7,o.z-1],.13,m.blue,fallback);pipe([o.x+dx,1.7,o.z-1],[o.x+dx,1.7,o.z+1],.13,m.blue,fallback);shape('torus',[.3,.3,.3],[o.x+dx,1.8,o.z],m.red,[Math.PI/2,0,0],fallback);}
+    }else if(['warehouse','dock'].includes(o.asset)){
+      for(const y of [.2,1,1.8])box([o.w,.08,o.d],[o.x,y,o.z],m.steel,fallback);
+      for(const dx of [-o.w/2,o.w/2])for(const dz of [-o.d/2,o.d/2])box([.1,o.h,.1],[o.x+dx,o.h/2,o.z+dz],m.yellow,fallback);
+      for(let z=o.z-o.d/2+.6;z<o.z+o.d/2;z+=1.2)for(const y of [.5,1.3])box([o.w*.65,.55,.8],[o.x,y,z],m.wall,fallback);
     }else{
-      box([1.8,1.5,1.5],[o.x,.9,o.z],m.green);
-      for(const dx of [-.8,.8])for(let i=0;i<7;i++)box([.15,1.45,.07],[o.x+dx,.9,o.z-.6+i*.2],m.silver);
-      for(const dx of [-.6,0,.6]){cyl(.1,.65,[o.x+dx,1.95,o.z],m.wall);for(let i=0;i<4;i++)cyl(.18,.04,[o.x+dx,1.7+i*.12,o.z],m.wall);}
-      sign('TRANSFORMER / TX',o.x,2.65,o.z+1.22,2.8);
+      // Detailed GLB replaces this compact fallback only after it loads.
+      if(o.asset==='control_cabinets'||o.asset==='oil_transformer')for(const dx of [-.65,.65]){box([1.1,2.1,1.2],[o.x+dx,1.12,o.z],m.blue,fallback);for(let y=.5;y<1.4;y+=.2)box([.85,.04,.04],[o.x+dx,y,o.z+.62],m.silver,fallback);}
+      else {shape('cylinder',[.65,Math.min(o.d-.2,3),.65],[o.x,1,o.z],m.blue,[Math.PI/2,0,0],fallback);for(const dx of [-.75,.75])box([.15,.7,o.d*.7],[o.x+dx,.4,o.z],m.steel,fallback);}
     }
-    activeFallback=null;
-  }
-  for(const z of [bounds.minZ,bounds.maxZ])wall(0,z,80,.3,4.2);
-  for(const x of [bounds.minX,bounds.maxX])wall(x,0,.3,45,4.2);
-  // Overhead runs connect bays without obstructing the robot's travel space.
-  for(const z of [-16,16]){
-    for(const [y,r,mat] of [[3.7,.16,m.silver],[4.2,.22,m.blue],[4.65,.1,m.yellow]]){
-      pipe([-38,y,z],[38,y,z],r,mat);
-      for(let x=-36;x<=36;x+=8)cyl(r*1.6,.09,[x,y,z],m.steel,[0,0,Math.PI/2]);
+    if(o.waypoint==='WP11'){
+      // Battery banks behind the UPS/control enclosures stay on the same pad.
+      const z=o.z+o.d*.35,width=o.w-.3;
+      for(const y of [.2,.9,1.6,2.3])box([width,.075,.65],[o.x,y,z],m.steel);
+      for(const dx of [-width/2,width/2])box([.09,2.35,.65],[o.x+dx,1.2,z],m.steel);
+      for(let x=o.x-width/2+.3;x<o.x+width/2-.2;x+=.55)for(const y of [.53,1.23,1.93]){
+        box([.43,.53,.45],[x,y,z],m.dark);
+        for(const dx of [-.12,.12])shape('cylinder',[.028,.055,.028],[x+dx,y+.3,z],dx<0?m.red:m.silver);
+      }
     }
-    for(let x=-36;x<=36;x+=8){box([.13,1.7,.13],[x,4.25,z+1.8],m.steel);box([.15,.15,4],[x,4.95,z],m.steel);}
-    box([77,.22,.7],[0,4.9,z-2],m.dark);for(let x=-37;x<38;x+=2)box([.08,.28,.8],[x,4.9,z-2],m.silver);
-    box([76,.65,.8],[0,5.5,z+3],m.silver);for(let x=-36;x<38;x+=4)box([.06,.7,.9],[x,5.5,z+3],m.steel);
+    // Flush drainage grating stays walkable and below the fixed route dots.
+    box([o.w*.85,.012,.13],[o.x,.012,o.z+o.d/2+.28],m.dark);for(let x=o.x-o.w*.425+.035;x<o.x+o.w*.425;x+=.09)box([.025,.01,.12],[x,.024,o.z+o.d/2+.28],m.silver);
+    for(const side of [-1,1])box([o.w,.008,.045],[o.x,.01,o.z+side*(o.d/2+.15)],m.yellow);
+    // Bolted foundations, gauges, service pipes stay inside the collision envelope.
+    for(const dx of [-o.w*.4,o.w*.4])for(const dz of [-o.d*.4,o.d*.4])shape('cylinder',[.055,.07,.055],[o.x+dx,.25,o.z+dz],m.silver);
   }
-  for(let x=-35;x<=35;x+=10){
-    box([.16,2,.16],[x,5.7,-21],m.steel);box([.16,2,.16],[x,5.7,21],m.steel);box([.15,.25,42],[x,6.8,0],m.steel);
-    for(const z of [-6,6]){box([2,.13,.45],[x,6.5,z],m.dark);box([1.8,.04,.3],[x,6.41,z],m.light);}
-  }
-  // Underside-only roof panels provide an interior ceiling in robot/chase views
-  // while allowing the same unobstructed cutaway in top-down views.
-  const roofGeo=keep(new THREE.PlaneGeometry(78,9)),roofMat=material('#858d89',.89,.15);
-  for(const z of [-15,0,15]){
-    const panel=new THREE.Mesh(roofGeo,roofMat);panel.position.set(0,7.1,z);panel.rotation.x=Math.PI/2;scene.add(panel);
-    for(let x=-38;x<=38;x+=2)box([.035,.07,9],[x,7.02,z],m.silver);
-  }
-  // Maintenance stations and service details stay on existing machinery pads.
-  for(const x of [-28,-12,4,26])for(const z of [-16,16]){
-    for(let dx=-1.1;dx<=1.1;dx+=.2)box([.075,.016,.24],[x+dx,.02,z+1.26],m.yellow);
-    pipe([x-.85,2.45,z+.65],[x+.85,2.45,z+.65],.035,m.yellow);
-    for(const dx of [-.85,.85])pipe([x+dx,.2,z+.65],[x+dx,2.45,z+.65],.025,m.steel);
-    sign('INSPECT / '+(x<0?'MECHANICAL':'ELECTRICAL'),x,2.32,z+.66,1.45);
-  }
-  // Maintenance access stays over equipment footprints, away from mission routes.
-  box([2.8,.12,2.2],[-28,2.8,16],m.steel);for(let x=-29.3;x<=-26.7;x+=.65)pipe([x,2.8,17],[x,3.8,17],.035,m.yellow);pipe([-29.3,3.8,17],[-26.7,3.8,17],.035,m.yellow);
-  for(const dx of [-.3,.3])pipe([-28+dx,.1,17.1],[-28+dx,3,17.1],.035,m.silver);for(let y=.3;y<3;y+=.3)pipe([-28.3,y,17.1],[-27.7,y,17.1],.025,m.silver);
-  sign('01 / TURBINE HALL',-34,3.1,9.78,5);sign('02 / COOLING & MECHANICAL',-11,3.1,-9.78,6,'#69d3ca',Math.PI);sign('03 / ELECTRICAL CONTROL',6,3.1,9.78,6);sign('04 / TRANSFORMER BAY',28,3.1,-9.78,5,'#69d3ca',Math.PI);
-  sign('HIGH VOLTAGE / AUTHORIZED ACCESS',14.55,2.65,6,4,'#f2c261',Math.PI/2);
-  // The extracted exterior shell has gaps where high-density source meshes were
-  // omitted. A cohesive boiler-house volume and stacks complete that silhouette.
-  box([11,7.5,22],[-56,3.75,0],m.wall);box([11.4,.3,22.4],[-56,7.65,0],m.steel);
-  for(const z of [-8,8]){
-    cyl(1.2,17,[-56,8.5,z],m.silver);cyl(1.38,.3,[-56,17,z],m.dark);
-    pipe([-50,4,z],[-45,4,z],.4,m.silver);pipe([-45,4,z],[-45,6.5,z],.4,m.silver);
-  }
-  sign('GENERATION / BOILER HOUSE',-50.4,5.5,0,7,'#d6ac4d',Math.PI/2);
-  for(const loc of locations){const p=worldPoint(loc.location_id);const ring=new THREE.Mesh(keep(new THREE.RingGeometry(.42,.48,32)),keep(new THREE.MeshBasicMaterial({color:'#4eaea5',transparent:true,opacity:.7,side:THREE.DoubleSide})));ring.rotation.x=-Math.PI/2;ring.position.set(p.x,.021,p.z);scene.add(ring);}
-  for(const {geometry,material,matrices,group} of batches.values()){const mesh=new THREE.InstancedMesh(geometry,material,matrices.length);matrices.forEach((matrix,i)=>mesh.setMatrixAt(i,matrix));mesh.castShadow=false;mesh.receiveShadow=true;mesh.computeBoundingSphere();(group||scene).add(mesh);keep(mesh);}
-
-  function disposeModel(root){const items=[];root.traverse(o=>{if(o.geometry)items.push(o.geometry);for(const mat of [].concat(o.material||[])){items.push(mat);for(const v of Object.values(mat))if(v?.isTexture)items.push(v);}});for(const r of new Set(items))r.dispose();}
-  function registerModel(root){root.traverse(o=>{if(o.geometry)keep(o.geometry);if(o.material)for(const mat of [].concat(o.material)){keep(mat);for(const value of Object.values(mat))if(value?.isTexture)keep(value);}});}
-  function instantiate(root,targetSize,positions,rotation=[0,0,0],castShadow=false){
-    const template=new THREE.Group(),item=root.clone(true);template.add(item);item.rotation.set(...rotation);template.updateMatrixWorld(true);
-    const bound=new THREE.Box3().setFromObject(template),size=bound.getSize(new THREE.Vector3()),center=bound.getCenter(new THREE.Vector3());
-    const factor=Math.min(...targetSize.map((n,i)=>n/Math.max(size.getComponent(i),.001)));template.scale.setScalar(factor);item.position.sub(new THREE.Vector3(center.x,bound.min.y,center.z));template.updateMatrixWorld(true);
-    template.traverse(child=>{if(!child.isMesh)return;const instance=new THREE.InstancedMesh(child.geometry,child.material,positions.length);positions.forEach((p,i)=>{const transform=new THREE.Matrix4().makeTranslation(...p);instance.setMatrixAt(i,transform.multiply(child.matrixWorld));});instance.castShadow=castShadow;instance.receiveShadow=true;instance.computeBoundingSphere();scene.add(instance);keep(instance);});
-  }
-  function mesh(root,fragment){let match;root.traverse(o=>{if(o.isMesh&&o.name.includes(fragment))match=o;});return match;}
-  const loader=new GLTFLoader();let count=0;const total=industrialAssetNames.length+engineeredAssetNames.length;onAssets({loaded:0,total,failed:[]});const failed=[];
-  const jobs=industrialAssetNames.map(async name=>{
-    try{
-      const gltf=await loader.loadAsync('/models/industrial/'+name+'.glb');
-      if(disposed){disposeModel(gltf.scene);return;}
-      registerModel(gltf.scene);
-      if(name==='industrial_electrical_box')instantiate(gltf.scene,[.5,.75,.28],cabinetPlacements.map(p=>[p[0],1.1,p[2]-.87]));
-      if(name==='factory_modular_kit'){
-        const column=mesh(gltf.scene,'_11_'),beam=mesh(gltf.scene,'_14_'),access=mesh(gltf.scene,'_35_');
-        if(column)instantiate(column,[.9,5.5,.9],[-30,-10,10,30].flatMap(x=>[-23,23].map(z=>[x,0,z])),[0,0,0],true);
-        if(beam)instantiate(beam,[.6,.6,3.5],[-30,-10,10,30].flatMap(x=>[-19,-15,-11,-7,-3,1,5,9,13,17].map(z=>[x,5.8,z])));
-        if(access)instantiate(access,[2.7,2.5,2],[[4,.2,-16],[26,.2,16]]);
+  for(const bay of roofPlan.bays){const r=bay;currentFloor=r.floor;const [x1,y1,x2,y2]=r.rect,a=imageToWorld([x1,y1]),b=imageToWorld([x2,y2]);
+    const roof=roofGroups[r.floor],{supports,point,purlins,center}=bay,cx=center.x,cz=center.z,width=bay.width,yaw=-Math.atan2(supports[1].z-supports[0].z,supports[1].x-supports[0].x);
+    supports.forEach((p,i)=>beam(p,supports[(i+1)%4],6.32,roof));
+    for(const [left,right] of [[supports[0],supports[1]],[supports[3],supports[2]]]){const dx=right.x-left.x,dz=right.z-left.z,length=Math.hypot(dx,dz),key=spanKey(left,right,6.35);if(length>.5&&!trussKeys.has(key)){trussKeys.add(key);const parent=new THREE.Group();parent.position.set((left.x+right.x)/2,6.35,(left.z+right.z)/2);parent.rotation.y=-Math.atan2(dz,dx);roof.add(parent);structuralPlacements.roof_truss.push({parent,scale:[length/6,1,1]});pipe([-length/2,0,0],[length/2,0,0],.075,m.frame,parent.userData.fallback=new THREE.Group());parent.add(parent.userData.fallback);}}
+    for(const p of purlins)beam(p.a,p.b,7.24,roof);
+    pipe([supports[0].x,7.24,supports[0].z],[supports[2].x,7.24,supports[2].z],.018,m.silver,roof);
+    // Services use the same bay coordinates as purlins: every hanger touches a beam.
+    for(const v of [.15,.85]){const start=point(.04,v),end=point(.96,v),length=Math.hypot(end.x-start.x,end.z-start.z);pipe([start.x,5.4,start.z],[end.x,5.4,end.z],.085,m.silver,roof);
+      const tray=new THREE.Group();tray.position.set((start.x+end.x)/2,5.65,(start.z+end.z)/2);tray.rotation.y=-Math.atan2(end.z-start.z,end.x-start.x);roof.add(tray);box([length,.035,.025],[0,0,-.16],m.steel,tray);box([length,.035,.025],[0,0,.16],m.steel,tray);for(let x=-length/2;x<length/2;x+=.4)box([.025,.035,.34],[x,0,0],m.silver,tray);
+      for(const purlin of purlins){const p=point(purlin.u,v),parent=new THREE.Group();parent.position.set(p.x,5.315,p.z);parent.rotation.y=yaw+Math.PI/2;roof.add(parent);structuralPlacements.pipe_hanger.push({parent,scale:[1,1,1]});for(const side of [-1,1]){const dx=Math.cos(yaw+Math.PI/2)*side*.22,dz=-Math.sin(yaw+Math.PI/2)*side*.22;pipe([p.x+dx,6.015,p.z+dz],[p.x+dx,7.24,p.z+dz],.014,m.silver,roof);if(side===1)pipe([p.x-dx,7.24,p.z-dz],[p.x+dx,7.24,p.z+dz],.027,m.frame,roof);}}
+    }
+    const ductA=point(.04,.28),ductB=point(.96,.28),ductLength=Math.hypot(ductB.x-ductA.x,ductB.z-ductA.z),duct=new THREE.Group();duct.position.set((ductA.x+ductB.x)/2,6.02,(ductA.z+ductB.z)/2);duct.rotation.y=yaw;roof.add(duct);box([ductLength,.32,.42],[0,0,0],m.silver,duct);for(let x=-ductLength/2+.5;x<ductLength/2;x+=1.6){box([.025,.35,.45],[x,0,0],m.frame,duct);}
+    for(const purlin of purlins){const p=point(purlin.u,.28);pipe([p.x,6.2,p.z],[p.x,7.24,p.z],.016,m.silver,roof);}
+    const fireA=point(.04,.72),fireB=point(.96,.72);pipe([fireA.x,5.05,fireA.z],[fireB.x,5.05,fireB.z],.045,m.red,roof);for(const purlin of purlins){const p=point(purlin.u,.72);pipe([p.x,5.05,p.z],[p.x,4.95,p.z],.015,m.silver,roof);pipe([p.x,5.09,p.z],[p.x,7.24,p.z],.011,m.silver,roof);}
+    beam(point(0,.5),point(1,.5),6.32,roof);
+    const fixture=new THREE.Group();fixture.position.set(cx,5.82,cz);fixture.rotation.y=yaw;roof.add(fixture);structuralPlacements.industrial_luminaire.push({parent:fixture,scale:[1,1,1]});
+    box([1.5,.04,.28],[0,-.04,0],m.light,fixture.userData.fallback=new THREE.Group());fixture.add(fixture.userData.fallback);
+    if(['WP03','WP08','WP12','WP15'].includes(r.id)){const lamp=new THREE.RectAreaLight('#edf1e8',3,Math.min(8,width),8);lamp.position.set(cx,5.68,cz);lamp.rotation.x=-Math.PI/2;groups[r.floor].add(lamp);}
+    // Rounded risers tap the actual overhead header. Lower ports enter the
+    // foundation as buried services; new pipework cannot block walking routes.
+    for(const o of equipment.filter(e=>e.waypoint===r.id&&!['warehouse','dock'].includes(e.asset))){
+      if(['control_cabinets','oil_transformer'].includes(o.asset)){
+        const start={x:o.x+o.w*.42,z:o.z+o.d*.42},tap=headerTap(bay,start,.85);
+        roundedPipe([[start.x,.22,start.z],[start.x,4.45,start.z],[tap.x,4.45,tap.z],[tap.x,5.65,tap.z]],.025,m.dark);
+      }else for(const sign of [-1,1]){
+        const start={x:o.x+sign*o.w*.42,z:o.z-o.d*.42},tap=headerTap(bay,start);
+        roundedPipe([[start.x,.22,start.z],[start.x,4.7,start.z],[tap.x,4.7,tap.z],[tap.x,5.4,tap.z]],.06,m.blue);
+        pipe([start.x,2.37,start.z],[start.x,2.43,start.z],.105,m.silver);
+        for(let i=0;i<6;i++){const a=i*Math.PI/3,dx=Math.cos(a)*.083,dz=Math.sin(a)*.083;pipe([start.x+dx,2.35,start.z+dz],[start.x+dx,2.45,start.z+dz],.012,m.dark);}
       }
-      if(name==='large_modular_pipes_metal'){
-        const valve=mesh(gltf.scene,'BigValve'),elbow=mesh(gltf.scene,'RoundElbow'),clamp=mesh(gltf.scene,'Clamp'),small=mesh(gltf.scene,'SmallValve'),straight=mesh(gltf.scene,'Straight4'),connector=mesh(gltf.scene,'WallConnector');
-        if(valve)instantiate(valve,[.75,.6,.75],[-28,-12,4,26].flatMap(x=>[-16,16].map(z=>[x,3.55,z])));
-        if(elbow)instantiate(elbow,[1.3,1.3,1.3],[[-37,3.5,-16],[37,3.5,16]]);
-        if(clamp)instantiate(clamp,[.6,.5,.6],[-28,-12,4,26].flatMap(x=>[-16,16].map(z=>[x,4.1,z])));
-        if(small)instantiate(small,[.55,.4,.55],[[-12,1.4,-15.2],[-12,1.4,16.8]]);
-        if(straight)instantiate(straight,[3,.6,.6],[-28,-12,4,26].flatMap(x=>[-16,16].map(z=>[x,4,z])),[0,0,Math.PI/2]);
-        if(connector)instantiate(connector,[.6,.4,.6],[-28,-12,4,26].flatMap(x=>[-16,16].map(z=>[x,3.8,z])));
+    }
+    if(r.id==='WP05'){
+      // Grated service platform and maintenance ladder beside the pipe banks.
+      const p=imageToWorld([30,47]);box([1.1, .1,5],[p.x,2,p.z-1],m.steel);for(let z=p.z-3.3;z<p.z+1.2;z+=.22)box([1.12,.03,.045],[p.x,2.07,z],m.silver);
+      for(const dx of [-.5,.5]){pipe([p.x+dx,2.1,p.z-3.4],[p.x+dx,3.1,p.z-3.4],.03,m.yellow);pipe([p.x+dx,3.1,p.z-3.4],[p.x+dx,3.1,p.z+1.4],.03,m.yellow);}
+      for(const dx of [-.28,.28])pipe([p.x+dx,.1,p.z],[p.x+dx,2.1,p.z],.025,m.silver);for(let y=.25;y<2;y+=.25)pipe([p.x-.28,y,p.z],[p.x+.28,y,p.z],.022,m.silver);
+    }
+  }
+  for(const b of batches.values()){const mesh=new THREE.InstancedMesh(geos[b.kind],b.material,b.matrices.length);b.matrices.forEach((v,i)=>mesh.setMatrixAt(i,v));mesh.receiveShadow=true;mesh.computeBoundingSphere();(b.parent||groups[b.floor]).add(mesh);keep(mesh);}
+  function register(root){root.traverse(o=>{if(o.geometry)keep(o.geometry);for(const m of [].concat(o.material||[])){keep(m);for(const t of Object.values(m))if(t?.isTexture)keep(t);}});}
+  function release(root){const items=[];root.traverse(o=>{if(o.geometry)items.push(o.geometry);for(const m of [].concat(o.material||[])){items.push(m);for(const t of Object.values(m))if(t?.isTexture)items.push(t);}});new Set(items).forEach(r=>r.dispose());}
+  function fit(root,o,size=[o.w-.12,o.h-.22,o.d-.12],y=.22,attach=true){const group=new THREE.Group(),clone=root.clone(true);group.add(clone);group.updateMatrixWorld(true);const bound=new THREE.Box3().setFromObject(group),s=bound.getSize(new THREE.Vector3()),c=bound.getCenter(new THREE.Vector3()),scale=Math.min(...size.map((n,i)=>n/Math.max(.001,s.getComponent(i))));clone.position.sub(new THREE.Vector3(c.x,bound.min.y,c.z));group.scale.setScalar(scale);group.position.set(o.x,y,o.z);clone.traverse(m=>{if(m.isMesh){m.castShadow=true;m.receiveShadow=true;}});if(attach)groups[o.floor].add(group);return group;}
+  const loader=new GLTFLoader(),failed=[];let count=0;const names=[...engineeredAssetNames,...industrialAssetNames];onAssets({loaded:0,total:names.length,failed:[]});
+  names.push(...Object.keys(structuralPlacements),'service_manifold');onAssets({loaded:0,total:names.length,failed:[]});
+  const jobs=names.map(async name=>{try{const path=name==='service_manifold'?'services':structuralPlacements[name]?'structural':engineeredAssetNames.includes(name)?'engineered':'industrial',gltf=await loader.loadAsync('/models/'+path+'/'+name+'.glb');if(disposed){release(gltf.scene);return;}register(gltf.scene);
+    if(path==='structural'){
+      const instances=new Map();gltf.scene.updateMatrixWorld(true);
+      for(const p of structuralPlacements[name]){p.parent.updateWorldMatrix(true,false);let ancestor=p.parent;while(ancestor.parent&&!Object.values(roofGroups).includes(ancestor))ancestor=ancestor.parent;const floor=Object.keys(roofGroups).find(id=>roofGroups[id]===ancestor),scale=new THREE.Matrix4().makeScale(...p.scale);gltf.scene.traverse(o=>{if(!o.isMesh)return;const key=floor+o.uuid;if(!instances.has(key))instances.set(key,{o,floor,matrices:[]});instances.get(key).matrices.push(p.parent.matrixWorld.clone().multiply(scale).multiply(o.matrixWorld));});if(p.parent.userData.fallback)p.parent.userData.fallback.visible=false;}
+      for(const b of instances.values()){const mesh=new THREE.InstancedMesh(b.o.geometry,b.o.material,b.matrices.length);b.matrices.forEach((matrix,i)=>mesh.setMatrixAt(i,matrix));mesh.computeBoundingSphere();mesh.receiveShadow=true;roofGroups[b.floor].add(mesh);keep(mesh);}
+    }
+    if(path==='services'){
+      const instances=new Map(),connectors=new Map();gltf.scene.updateMatrixWorld(true);
+      for(const p of servicePlacements){const group=fit(gltf.scene,p,p.size,.22,false);group.updateMatrixWorld(true);group.traverse(o=>{if(!o.isMesh)return;const key=p.floor+o.geometry.uuid+o.material.uuid;if(!instances.has(key))instances.set(key,{geometry:o.geometry,material:o.material,floor:p.floor,matrices:[]});instances.get(key).matrices.push(o.matrixWorld.clone());});
+        for(const port of servicePorts){const point=group.localToWorld(new THREE.Vector3(...port).add(group.children[0].position)),length=point.y-.22,matrix=new THREE.Matrix4().compose(new THREE.Vector3(point.x,.22+length/2,point.z),new THREE.Quaternion(),new THREE.Vector3(.085*group.scale.x,length,.085*group.scale.x));if(!connectors.has(p.floor))connectors.set(p.floor,{geometry:geos.cylinder,material:m.blue,floor:p.floor,matrices:[]});connectors.get(p.floor).matrices.push(matrix);}
       }
-      if(name==='industrial_pipes_pack'){
-        const junction=mesh(gltf.scene,'Cylinder_011')||mesh(gltf.scene,'Cylinder.011'),wheel=mesh(gltf.scene,'Torus'),straight=mesh(gltf.scene,'Cylinder_036')||mesh(gltf.scene,'Cylinder.036');
-        if(junction)instantiate(junction,[.8,.8,.8],[-28,-12,4,26].flatMap(x=>[-16,16].map(z=>[x,3.5,z])));
-        if(wheel)instantiate(wheel,[.5,.5,.2],[[-12,1.6,-15.1],[-12,1.6,16.9],[4,1.6,16.9]]);
-        if(straight)instantiate(straight,[3.5,.65,.65],[-28,-12,4,26].flatMap(x=>[-16,16].map(z=>[x,3.5,z])),[0,Math.PI/2,0]);
-      }
-      // Only the low-poly shell from the merged factory goes in the external yard.
-      if(name==='industrial_factory_with_towers_and_pipes'){
-        const lod=new THREE.LOD(),shell=gltf.scene.clone(true),b=new THREE.Box3().setFromObject(shell),s=b.getSize(new THREE.Vector3()),c=b.getCenter(new THREE.Vector3());
-        const scale=28/Math.max(s.x,s.y,s.z);shell.scale.setScalar(scale);shell.position.set(-c.x*scale,-b.min.y*scale,-c.z*scale);lod.addLevel(shell,0);lod.addLevel(new THREE.Group(),85);lod.position.set(-56,0,0);scene.add(lod);
-      }
-    }catch(e){failed.push(name);console.warn('Industrial component unavailable:',name,e.message);}
-    finally{if(!disposed)onAssets({loaded:++count,total,failed:[...failed]});}
-  });
-  jobs.push(...engineeredAssetNames.map(async name=>{
-    try{
-      const gltf=await loader.loadAsync('/models/engineered/'+name+'.glb');
-      if(disposed){disposeModel(gltf.scene);return;}
-      registerModel(gltf.scene);
-      const placements=equipmentPlacements(name);
-      instantiate(gltf.scene,placements[0].size,placements.map(p=>p.position),[0,0,0],true);
-      equipmentFallbacks.get(name).visible=false;
-    }catch(e){failed.push(name);console.warn('Engineered component unavailable:',name,e.message);}
-    finally{if(!disposed)onAssets({loaded:++count,total,failed:[...failed]});}
-  }));
-  return {solids,floor,ready:Promise.all(jobs),dispose:()=>{disposed=true;}};
+      for(const b of [...instances.values(),...connectors.values()]){const mesh=new THREE.InstancedMesh(b.geometry,b.material,b.matrices.length);b.matrices.forEach((v,i)=>mesh.setMatrixAt(i,v));mesh.computeBoundingSphere();mesh.castShadow=mesh.receiveShadow=true;groups[b.floor].add(mesh);keep(mesh);}
+    }
+    if(path==='engineered')for(const o of equipment.filter(e=>e.asset===name)){fit(gltf.scene,o);fallbacks.get(o).visible=false;}
+    if(name==='industrial_electrical_box')for(const o of equipment.filter(e=>e.asset==='control_cabinets'))fit(gltf.scene,o,[.5,.6,.3],1.3);
+    const find=part=>{let result;gltf.scene.traverse(o=>{if(o.isMesh&&o.name.includes(part))result=o;});return result;};
+    if(name==='large_modular_pipes_metal'){const valve=find('BigValve');if(valve)for(const o of equipment.filter(e=>['pipes','valves'].includes(e.asset)))fit(valve,o,[.6,.5,.6],1.7);}
+    if(name==='industrial_pipes_pack'){const junction=find('Cylinder_011')||find('Cylinder.011');if(junction)for(const o of equipment.filter(e=>e.asset==='pipes'))fit(junction,o,[1.1,.65,1],1.2);}
+    // The exterior factory shell is deliberately not placed: the reference defines no yard.
+  }catch(e){failed.push(name);console.warn('Industrial component unavailable:',name,e.message);}finally{if(!disposed)onAssets({loaded:++count,total:names.length,failed:[...failed]});}});
+  return {solids,groups,setRoof:(mode,cameraMode,dt)=>{const open=mode!=='full'||cameraMode==='top';upperWalls.forEach(o=>{o.visible=!open;});Object.values(roofGroups).forEach(o=>{o.visible=mode!=='hidden'&&mode!=='overhead'&&cameraMode!=='top';});decks.forEach(({root,material})=>{const alpha=open?0:1;material.opacity+=(alpha-material.opacity)*(1-Math.exp(-dt*12));material.transparent=material.opacity<.99;material.depthWrite=material.opacity>.99;root.visible=material.opacity>.01;});solids.filter(o=>o.userData.type==='wall').forEach(o=>{o.scale.y=open?1.35:o.userData.exterior?6.4:3.5;o.position.y=o.scale.y/2;});},setFloor:f=>Object.entries(groups).forEach(([id,g])=>{g.visible=f==='all'||f===id;}),ready:Promise.all(jobs),dispose:()=>{disposed=true;}};
 }

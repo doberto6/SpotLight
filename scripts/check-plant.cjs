@@ -11,12 +11,12 @@ const fs=require('node:fs');
     const page=await browser.newPage({viewport:{width:1450,height:1050}}),errors=[],warnings=[],assets=new Set();
     page.on('pageerror',e=>errors.push(e.message));
     page.on('console',m=>{if(m.type()==='error'||/component unavailable/i.test(m.text()))warnings.push(m.text()+' '+m.location().url);});
-    page.on('response',r=>{if(/\/models\/(industrial|engineered)\/.+\.glb$/.test(r.url())){assert.equal(r.status(),200);assets.add(r.url().split('/').at(-1));}});
+    page.on('response',r=>{if(/\/models\/(industrial|engineered|structural|services)\/.+\.glb$/.test(r.url())){assert.equal(r.status(),200);assets.add(r.url().split('/').at(-1));}});
     await page.goto(process.env.SPOT_URL||'http://localhost:3000');
     await page.getByRole('button',{name:'Mission Replay',exact:true}).click();
     const viewport=page.locator('.spot-replay-canvas');await viewport.locator('canvas').waitFor();
     await page.waitForFunction(()=>!document.querySelector('.industrial-loading'),null,{timeout:60000});
-    assert.equal(assets.size,10);
+    assert.equal(assets.size,15);
     const captureDir=process.env.SPOT_CAPTURE_DIR||'/tmp/spotlight-upgrade';fs.mkdirSync(captureDir,{recursive:true});
     await viewport.screenshot({path:path.join(captureDir,'chase.png')});
     for(const mode of ['free','top','first','chase']){await page.locator('#spot-camera').selectOption(mode);await page.waitForTimeout(200);}
