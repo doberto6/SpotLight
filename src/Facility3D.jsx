@@ -1,6 +1,7 @@
 import React, {useEffect, useRef, useState} from 'react';
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {createSpot,createRoom} from './spot-scene.js';
 
 // Registered against the waypoint pins printed on the supplied floor-plan image.
 // These are image coordinates, not surveyed building coordinates.
@@ -22,9 +23,10 @@ function labelSprite(text, color) {
   const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;
   const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:texture,depthTest:false}));sprite.scale.set(.8,.27,1);return sprite;
 }
-export default function Facility3D({locations,actions,anomalies=[],events=[],replayIndex=0,replaySpeed=1,floor,current,selectedLocation,onSelect,motion=false,showLabels=true}) {
+export default function Facility3D({locations,actions,anomalies=[],events=[],replayIndex=0,replaySpeed=1,floor,current,selectedLocation,onSelect,motion=false,showLabels=true,simulation=false}) {
   const hostRef=useRef(null),apiRef=useRef(null),selectRef=useRef(onSelect),stateRef=useRef({});
-  const [error,setError]=useState('');selectRef.current=onSelect;stateRef.current={current,selectedLocation,motion,showLabels,floor,anomalies,events,replayIndex,replaySpeed};
+  const [follow,setFollow]=useState(true);
+  const [error,setError]=useState('');selectRef.current=onSelect;stateRef.current={current,selectedLocation,motion,showLabels,floor,anomalies,events,replayIndex,replaySpeed,follow};
   useEffect(()=>{
     const host=hostRef.current;let renderer;
     try{renderer=new THREE.WebGLRenderer({antialias:true});}catch{setError('3D graphics unavailable. Switch to the 2D map.');return;}
@@ -33,6 +35,8 @@ export default function Facility3D({locations,actions,anomalies=[],events=[],rep
     const camera=new THREE.OrthographicCamera(-10,10,7,-7,.1,100);const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.minZoom=.6;controls.maxZoom=4;controls.maxPolarAngle=Math.PI/2.2;
     const reset=()=>{const f=stateRef.current.floor;controls.target.set(f==='1'?-2.52:f==='2'?5.48:0,0,0);camera.position.set(controls.target.x+3,14,12);camera.zoom=f==='all'?1:1.3;camera.updateProjectionMatrix();controls.update();};apiRef.current={reset};reset();
     const resources=[],pickables=[],groups={1:[],2:[]},markers=[],particles=[];
+    const rooms=[];
+    const robot=simulation?createSpot(resources):null;if(robot)scene.add(robot);
     const addMesh=(geo,mat)=>{resources.push(geo,mat);const mesh=new THREE.Mesh(geo,mat);scene.add(mesh);return mesh;};
     const loader=new THREE.TextureLoader();
     // Crop the same supplied image into two registered floor slabs; waypoint positions stay identical to 2D.
@@ -55,9 +59,10 @@ export default function Facility3D({locations,actions,anomalies=[],events=[],rep
     };
     for(const loc of locations){
       const p=point(loc.location_id),color=failed.has(loc.location_id)?'#f2b45e':'#70b9d6';
+      if(simulation){const room=createRoom(scene,resources,p,loc);rooms.push({...room,loc});groups[loc.floor]?.push(room.room,room.outline);pickables.push(room.room);}
       const marker=addMesh(new THREE.CylinderGeometry(.12,.16,.22,20),new THREE.MeshStandardMaterial({color,emissive:color,emissiveIntensity:.2}));marker.position.copy(p);marker.userData.location=loc;pickables.push(marker);
       const halo=addMesh(new THREE.RingGeometry(.3,.42,48),new THREE.MeshBasicMaterial({color:'#ffcc66',side:THREE.DoubleSide,depthTest:false}));halo.rotation.x=-Math.PI/2;halo.position.set(p.x,.04,p.z);halo.renderOrder=3;halo.visible=false;
-      const label=labelSprite(loc.location_id,color);label.position.set(p.x,.52,p.z);scene.add(label);resources.push(label.material.map,label.material);label.userData.location=loc;pickables.push(label);groups[loc.floor]?.push(marker,label,halo);markers.push({marker,label,halo,loc,color});
+      const label=labelSprite(loc.location_id,color);label.position.set(p.x,simulation?1.25:.52,p.z);scene.add(label);resources.push(label.material.map,label.material);label.userData.location=loc;pickables.push(label);groups[loc.floor]?.push(marker,label,halo);markers.push({marker,label,halo,loc,color});
     }
     for(const f of ['1','2']){const ids=routeActions.map(a=>a.location_id);const points=ids.map(id=>point(id).setY(.08));if(!points.length)continue;
       const segments=[];for(let n=1;n<points.length;n++){if(routeActions[n-1].mission_id===routeActions[n].mission_id&&[ids[n-1],ids[n]].every(id=>locations.find(l=>l.location_id===id)?.floor===f))segments.push(points[n-1],points[n]);}
@@ -77,6 +82,7 @@ export default function Facility3D({locations,actions,anomalies=[],events=[],rep
       target=routeActions.findIndex(a=>a.action_id===actionId);
       if(replay.replayIndex<lastIndex||(!replay.motion&&replay.replayIndex!==lastIndex)){visited.clear();for(const route of particles)route.progress=Math.max(0,target);}
       lastIndex=replay.replayIndex;
+      if(robot)robot.visible=false;
       for(const route of particles){
         const {particle,points,ids,floor:f}=route;
         const targetFloor=locations.find(l=>l.location_id===routeActions[target]?.location_id)?.floor;
@@ -88,7 +94,17 @@ export default function Facility3D({locations,actions,anomalies=[],events=[],rep
         }
         if(target>=0)for(let n=0;n<=Math.floor(route.progress);n++)visited.add(ids[n]);
         const i=Math.floor(route.progress);particle.position.lerpVectors(points[i],points[Math.min(i+1,points.length-1)],route.progress-i);
+        if(robot&&particle.visible){
+          robot.visible=true;robot.position.copy(particle.position);robot.position.y=0;
+          const next=points[Math.min(i+1,points.length-1)],previous=points[i];
+          if(next.distanceToSquared(previous)>.001)robot.rotation.y=-Math.atan2(next.z-previous.z,next.x-previous.x);
+          const walking=replay.motion&&route.progress<target;
+          robot.userData.legs.forEach((leg,n)=>leg.rotation.z=walking?Math.sin(now*.012+(n===0||n===3?0:Math.PI))*.35:0);
+          if(replay.follow){const offset=camera.position.clone().sub(controls.target);controls.target.lerp(robot.position,.06);camera.position.copy(controls.target).add(offset);}
+          particle.visible=false;
+        }
       }
+      for(const {room,loc} of rooms){const reached=visited.has(loc.location_id);room.material.color.set(reached?visitedColor(loc):'#39536b');room.material.opacity=loc.location_id===replay.current?.toUpperCase()?.trim()? .5:.24;}
       for(const {marker,label,halo,loc,color} of markers){
         const visible=stateRef.current.floor==='all'||loc.floor===stateRef.current.floor;
         const selected=loc.location_id===stateRef.current.selectedLocation,wasVisited=visited.has(loc.location_id);
@@ -99,7 +115,7 @@ export default function Facility3D({locations,actions,anomalies=[],events=[],rep
       renderer.render(scene,camera);frameId=requestAnimationFrame(frame);
     };frame();
     return()=>{cancelAnimationFrame(frameId);observer.disconnect();controls.dispose();renderer.domElement.removeEventListener('pointerdown',pointerDown);renderer.domElement.removeEventListener('click',click);for(const resource of resources)resource.dispose();renderer.dispose();renderer.domElement.remove();apiRef.current=null;};
-  },[locations,actions]);
+  },[locations,actions,simulation]);
   useEffect(()=>{apiRef.current?.applyFloor?.();},[floor]);
-  return <div className="facility-3d clean-facility"><div className="facility-3d-canvas" ref={hostRef} role="img" aria-label="Interactive 3D view of the supplied facility floor plans"/>{error?<p className="facility-3d-error" role="alert">{error}</p>:<div className="map-instructions">Drag to rotate · Scroll to zoom · Select a waypoint</div>}<button className="map-reset" onClick={()=>apiRef.current?.reset()}>Reset view</button><div className="map-key"><span>● Waypoint</span><span className="amber">● Failed inspection</span><span className="cyan">━ Mission route</span></div></div>;
+  return <div className="facility-3d clean-facility"><div className="facility-3d-canvas" ref={hostRef} role="img" aria-label={simulation?'3D SPOT mission simulation with raised rooms':'Interactive 3D view of the supplied facility floor plans'}/>{error?<p className="facility-3d-error" role="alert">{error}</p>:<div className="map-instructions">Drag to rotate · Scroll to zoom · Select a waypoint{simulation&&<label className="spot-follow"><input type="checkbox" checked={follow} onChange={e=>setFollow(e.target.checked)}/> Follow SPOT</label>}</div>}<button className="map-reset" onClick={()=>apiRef.current?.reset()}>Reset view</button><div className="map-key"><span>{simulation?'Yellow robot · SPOT':'● Waypoint'}</span><span className="amber">● Failed inspection</span><span className="cyan">━ Mission route</span>{simulation&&<span>Illustrative rooms and movement between recorded visits</span>}</div></div>;
 }
