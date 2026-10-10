@@ -1,0 +1,23 @@
+import http from 'node:http';import fs from 'node:fs';import path from 'node:path';import {loadData,kit,hotspotSQL} from './data.mjs';
+if(fs.existsSync('.env'))process.loadEnvFile('.env');
+const data=loadData();
+async function intelligence(){const {DATABRICKS_HOST:host,DATABRICKS_TOKEN:token,DATABRICKS_WAREHOUSE_ID:warehouse}=process.env;
+ if(!host||!token||!warehouse)return {source:'Local CSV analytics',configured:false,rows:data.metrics.byLocation};
+ const base=new URL(host.startsWith('https://')?host:'https://'+host);if(base.protocol!=='https:')throw Error('Databricks requires HTTPS');
+ const headers={'Authorization':'Bearer '+token,'Content-Type':'application/json'};
+ const request=async(url,options)=>{const r=await fetch(url,{...options,headers,signal:AbortSignal.timeout(35000)});if(!r.ok)throw Error('Databricks request failed (HTTP '+r.status+')');return r.json();};
+ let result=await request(new URL('/api/2.0/sql/statements',base),{method:'POST',body:JSON.stringify({warehouse_id:warehouse,statement:hotspotSQL(process.env.DATABRICKS_CATALOG||'main',process.env.DATABRICKS_SCHEMA||'spotlight'),wait_timeout:'10s',disposition:'INLINE',format:'JSON_ARRAY'})});
+ for(let attempt=0;['PENDING','RUNNING'].includes(result.status?.state)&&attempt<15;attempt++){await new Promise(r=>setTimeout(r,1000));result=await request(new URL('/api/2.0/sql/statements/'+encodeURIComponent(result.statement_id),base),{});}
+ if(result.status?.state!=='SUCCEEDED')throw Error('Databricks query did not succeed: '+result.status?.state);
+ if(result.result?.next_chunk_index!=null||result.manifest?.truncated)throw Error('Query returned more rows than the inline response supports');
+ const cols=result.manifest.schema.columns.map(c=>c.name);const rows=(result.result?.data_array||[]).map(r=>Object.fromEntries(cols.map((c,i)=>[c,r[i]]))).map(r=>({key:r.location_id,total:Number(r.total),failed:Number(r.failed),failureRate:Number(r.failed)/Number(r.total)*100}));
+ return {source:'Databricks SQL warehouse',configured:true,statementId:result.statement_id,rows};}
+const production=process.argv.includes('--production');if(production&&!fs.existsSync('dist/index.html'))throw Error('Run npm run build before npm start');const vite=production?null:await (await import('vite')).createServer({server:{middlewareMode:true},appType:'spa'});
+const server=http.createServer(async(req,res)=>{try{const url=new URL(req.url,'http://localhost');if(url.pathname==='/api/data'){res.setHeader('Content-Type','application/json');return res.end(JSON.stringify(data));}if(url.pathname==='/api/intelligence'){res.setHeader('Content-Type','application/json');return res.end(JSON.stringify(await intelligence()));}
+ if(url.pathname.startsWith('/kit-assets/')){const relative=decodeURIComponent(url.pathname.slice(12));const root=path.join(kit,'04_ASSETS');const file=path.resolve(root,relative);if(!file.startsWith(root+path.sep)||!fs.existsSync(file)||!fs.statSync(file).isFile()){res.statusCode=404;return res.end('Not found');}res.setHeader('Content-Type',file.endsWith('.png')?'image/png':'image/jpeg');return fs.createReadStream(file).pipe(res);}
+ if(vite)return vite.middlewares(req,res);
+ let file=path.resolve('dist','.'+url.pathname);if(!file.startsWith(path.resolve('dist')+path.sep)||!fs.existsSync(file)||!fs.statSync(file).isFile())file=path.resolve('dist/index.html');res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html');fs.createReadStream(file).pipe(res);
+ }catch(e){res.statusCode=502;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({error:e.message}));}});
+server.listen(Number(process.env.PORT||3000),'127.0.0.1',()=>console.log('SPOTlight: http://localhost:'+(process.env.PORT||3000)));
+
+

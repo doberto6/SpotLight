@@ -1,0 +1,9 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {loadData,analytics,parseCSV,hotspotSQL}from'../data.mjs';
+const d=loadData();
+test('source data and joins load',()=>{assert.equal(d.missions.length,27);assert.equal(d.actions.length,270);assert.equal(d.events.length,500);assert.equal(d.metrics.review,15);assert.equal(d.metrics.critical,4)});
+test('completion is independent from failed inspections',()=>{assert.equal(d.metrics.completed,26);assert.equal(d.metrics.completedWithFailures,21);const sample={missions:[{mission_id:'x',mission_status:'COMPLETED'},{mission_id:'y',mission_status:'FAILED'}],actions:[{mission_id:'x',status:'FAILED',location_id:'z'},{mission_id:'y',status:'FAILED',location_id:'z'}],anomalies:[]};assert.equal(analytics(sample).completedWithFailures,1)});
+test('failure denominator counts all actions',()=>{const wp=d.metrics.byLocation.find(r=>r.key==='WP09');assert.equal(wp.failed,8);assert.equal(wp.total,22);assert.ok(Math.abs(wp.failureRate-36.363636)<.001)});
+test('replay chronological and stable for equal timestamps',()=>{for(let i=1;i<d.events.length;i++){assert.ok(d.events[i].timestamp>=d.events[i-1].timestamp);if(d.events[i].timestamp===d.events[i-1].timestamp)assert.ok(d.events[i].event_id>d.events[i-1].event_id)}});
+test('CSV quoted commas, embedded newlines and escaped quotes',()=>{assert.deepEqual(parseCSV('id,note\r\n1,"a,b"\r\n2,"a\n""b"""\r\n'),[{id:'1',note:'a,b'},{id:'2',note:'a\n"b"'}])});
+test('critical M006 evidence is tied to original action',()=>{const anomaly=d.anomalies.find(a=>a.mission_id==='M006'&&a.location_id==='WP09'&&a.severity==='CRITICAL');assert.ok(anomaly);assert.ok(d.actions.some(a=>a.action_id===anomaly.action_id));assert.ok(d.readings.some(r=>r.action_id===anomaly.action_id))});
+test('SQL identifiers reject injection',()=>{assert.throws(()=>hotspotSQL('main;drop','spotlight'));assert.match(hotspotSQL('main','spotlight'),/main.spotlight.actions/)});
