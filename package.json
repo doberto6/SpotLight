@@ -7,9 +7,11 @@
     "dev": "node server.mjs",
     "build": "vite build",
     "test": "node --test",
+    "databricks:setup": "node databricks/setup.mjs",
     "start": "node server.mjs --production"
   },
   "dependencies": {
+    "@databricks/sql": "^2.2.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "three": "^0.186.1",

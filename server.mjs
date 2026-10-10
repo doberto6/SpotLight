@@ -1,4 +1,5 @@
 import http from 'node:http';import fs from 'node:fs';import path from 'node:path';import {loadData,kit,hotspotSQL} from './data.mjs';
+import {queries} from './databricks.mjs';
 if(fs.existsSync('.env'))process.loadEnvFile('.env');
 const data=loadData();
 async function intelligence(){const {DATABRICKS_HOST:host,DATABRICKS_TOKEN:token,DATABRICKS_WAREHOUSE_ID:warehouse}=process.env;
@@ -12,12 +13,14 @@ async function intelligence(){const {DATABRICKS_HOST:host,DATABRICKS_TOKEN:token
  if(result.result?.next_chunk_index!=null||result.manifest?.truncated)throw Error('Query returned more rows than the inline response supports');
  const cols=result.manifest.schema.columns.map(c=>c.name);const rows=(result.result?.data_array||[]).map(r=>Object.fromEntries(cols.map((c,i)=>[c,r[i]]))).map(r=>({key:r.location_id,total:Number(r.total),failed:Number(r.failed),failureRate:Number(r.failed)/Number(r.total)*100}));
  return {source:'Databricks SQL warehouse',configured:true,statementId:result.statement_id,rows};}
-const production=process.argv.includes('--production');if(production&&!fs.existsSync('dist/index.html'))throw Error('Run npm run build before npm start');const vite=production?null:await (await import('vite')).createServer({server:{middlewareMode:true},appType:'spa'});
-const server=http.createServer(async(req,res)=>{try{const url=new URL(req.url,'http://localhost');if(url.pathname==='/api/data'){res.setHeader('Content-Type','application/json');return res.end(JSON.stringify(data));}if(url.pathname==='/api/intelligence'){res.setHeader('Content-Type','application/json');return res.end(JSON.stringify(await intelligence()));}
+const production=process.argv.includes('--production');if(production&&!fs.existsSync('dist/index.html'))throw Error('Run npm run build before npm start');const vite=production?null:await (await import('vite')).createServer({server:{middlewareMode:true,hmr:false},appType:'spa'});
+const server=http.createServer(async(req,res)=>{try{const url=new URL(req.url,'http://localhost');if(url.pathname==='/api/health'){res.setHeader('Content-Type','application/json');return res.end(JSON.stringify({status:'ok',uptime_seconds:Math.round(process.uptime()),checked_at:new Date().toISOString()}));}if(url.pathname==='/api/databricks/overview'){res.setHeader('Content-Type','application/json');return res.end(JSON.stringify(await queries.overview()));}if(url.pathname==='/api/databricks/evidence'){res.setHeader('Content-Type','application/json');return res.end(JSON.stringify(await queries.evidence(url.searchParams.get('kind'),url.searchParams.get('id'))));}if(url.pathname==='/api/data'){res.setHeader('Content-Type','application/json');return res.end(JSON.stringify(data));}const dbRoutes={'/api/databricks/health':queries.health,'/api/databricks/missions':queries.missions,'/api/databricks/hidden-failures':queries.hiddenFailures,'/api/databricks/hotspots':queries.hotspots,'/api/databricks/anomalies':queries.anomalies,'/api/databricks/reliability':queries.reliability};if(dbRoutes[url.pathname]){res.setHeader('Content-Type','application/json');return res.end(JSON.stringify({source:'Databricks SQL connector',rows:await dbRoutes[url.pathname]()}));}if(url.pathname==='/api/intelligence'){res.setHeader('Content-Type','application/json');return res.end(JSON.stringify(await intelligence()));}
  if(url.pathname.startsWith('/kit-assets/')){const relative=decodeURIComponent(url.pathname.slice(12));const root=path.join(kit,'04_ASSETS');const file=path.resolve(root,relative);if(!file.startsWith(root+path.sep)||!fs.existsSync(file)||!fs.statSync(file).isFile()){res.statusCode=404;return res.end('Not found');}res.setHeader('Content-Type',file.endsWith('.png')?'image/png':'image/jpeg');return fs.createReadStream(file).pipe(res);}
  if(vite)return vite.middlewares(req,res);
  let file=path.resolve('dist','.'+url.pathname);if(!file.startsWith(path.resolve('dist')+path.sep)||!fs.existsSync(file)||!fs.statSync(file).isFile())file=path.resolve('dist/index.html');res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html');fs.createReadStream(file).pipe(res);
  }catch(e){res.statusCode=502;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({error:e.message}));}});
-server.listen(Number(process.env.PORT||3000),'127.0.0.1',()=>console.log('SPOTlight: http://localhost:'+(process.env.PORT||3000)));
+
+const port=Number(process.env.PORT||3000);
+server.listen(port,()=>console.log(`SPOTlight running at http://localhost:${port}`));
 
 

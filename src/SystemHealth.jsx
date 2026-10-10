@@ -1,0 +1,8 @@
+import React,{useEffect,useState} from 'react';
+import {api} from './Intelligence.jsx';
+export default function SystemHealth(){
+ const [checks,setChecks]=useState({}),[running,setRunning]=useState(false);
+ async function run(){setRunning(true);setChecks({});await Promise.all([['backend','/api/health'],['databricks','/api/databricks/health'],['views','/api/databricks/overview']].map(async([name,url])=>{const start=performance.now();try{await api(url);setChecks(c=>({...c,[name]:{ok:true,ms:Math.round(performance.now()-start),at:new Date().toLocaleTimeString()}}))}catch(e){setChecks(c=>({...c,[name]:{ok:false,error:e.message,at:new Date().toLocaleTimeString()}}))}}));setRunning(false);}
+ useEffect(()=>{run()},[]);
+ return <section className="panel"><div className="panel-head"><div><small>CONNECTION DIAGNOSTICS</small><h2>System Health</h2></div><button className="primary" disabled={running} onClick={run}>{running?'Checking…':'Run checks'}</button></div><p className="muted">Independent checks for the application server, SQL warehouse, and intelligence views.</p><div className="health-grid">{[['backend','Backend API','Application server is responding'],['databricks','Databricks SQL','Warehouse accepts a live SQL query'],['views','Intelligence views','All four analytics views can be queried']].map(([key,title,description])=><article className="health-card" key={key}><h3>{title}</h3><p className="muted">{description}</p><strong className={!checks[key]?'muted':checks[key].ok?'green':'red'}>{!checks[key]?'Checking…':checks[key].ok?'Connected':'Unavailable'}</strong>{checks[key]&&<><p>{checks[key].ok?`${checks[key].ms} ms response`:checks[key].error}</p><small className="muted">Checked at {checks[key].at}</small></>}</article>)}</div></section>;
+}

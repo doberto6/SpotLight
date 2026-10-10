@@ -60,7 +60,9 @@ Local calculations are explicitly labeled and do **not** satisfy the Databricks 
 3. Copy `.env.example` to `.env`. Set `DATABRICKS_HOST` (https workspace URL), `DATABRICKS_TOKEN`, `DATABRICKS_WAREHOUSE_ID`, catalog and schema. Restart the server.
 4. Open Intelligence. The source badge must say Databricks SQL warehouse and show a statement ID. A failed configured query is shown as an error, with local charts explicitly identified as fallback.
 
-Credentials stay server-side. `.env` is ignored. Do not share it. Missing inputs: workspace host, authorized token, warehouse ID, and uploaded actions table. A real query cannot be verified until these are supplied. The other dashboard metrics remain computed by the local backend; only the waypoint chart switches to Databricks.
+Credentials stay server-side. `.env` is ignored. Do not share it or commit it. Copy `.env.example` to `.env` and set `DATABRICKS_HOST`, `DATABRICKS_TOKEN`, `DATABRICKS_WAREHOUSE_ID`, `DATABRICKS_CATALOG`, and `DATABRICKS_SCHEMA`. For the supplied Free Edition tables, use `workspace` and `spotlight` for the catalog and schema. The warehouse HTTP path is derived as `/sql/1.0/warehouses/<DATABRICKS_WAREHOUSE_ID>`.
+
+The backend uses the official `@databricks/sql` Node.js connector. It exposes these credential-protected server endpoints: `/api/databricks/health`, `/api/databricks/missions`, `/api/databricks/hidden-failures`, `/api/databricks/hotspots`, `/api/databricks/anomalies`, and `/api/databricks/reliability`. The Intelligence page loads these endpoints and reports connector loading or query errors clearly. SQL operations, sessions, and clients are closed after every request. The React client never receives the token.
 
 ## Data and calculation notes
 
@@ -90,3 +92,12 @@ Next team work: configure and verify Databricks, replace browser-local follow-up
 
 Databricks API reference: https://docs.databricks.com/api/statement-execution/v1/statement-execution
 
+# Mission Intelligence and System Health
+
+After configuring the backend `.env`, run `npm run databricks:setup` to create four SQL views using the existing six tables. The token needs SELECT on the raw tables and permission to create views in the configured schema. Alternatively execute `databricks/mission-intelligence.sql` in Databricks SQL Editor with your warehouse selected. The script uses `workspace.spotlight`; the setup command substitutes your configured catalog and schema. Re-running setup replaces these four analytics views.
+
+The Intelligence tab queries `/api/databricks/overview` for mission review indicators, hidden failures (completed missions with failed actions), historical waypoint failure rates, severity-prioritized anomalies, and configuration/action-type success rates. Clicking a mission, waypoint, or finding loads `/api/databricks/evidence?kind=mission|waypoint|action&id=...` from Databricks, including actions, anomalies, and sensor readings. SQL aggregates actions and anomalies separately to avoid duplicated mission counts. Heatmap thresholds are display bands: green below 15%, amber 15–29.9%, red at least 30%, and gray without observations. These are historical inspection failure rates, not predictions of equipment failure.
+
+System Health independently checks `/api/health` (backend uptime), `/api/databricks/health` (live warehouse query), and `/api/databricks/overview` (analytics views). Click Run checks to repeat them. Credentials remain on the backend. Intelligence has explicit loading, empty, and failure states and never substitutes local records for unavailable SQL results. Existing mission replay and reports continue using the supplied challenge dataset.
+
+For production: run `npm run build`, then `npm start`. Rebuild after frontend changes. Open `http://localhost:3000`.
