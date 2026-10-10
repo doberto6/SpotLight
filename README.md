@@ -48,7 +48,9 @@ Local calculations are explicitly labeled and do **not** satisfy the Databricks 
 3. Copy `.env.example` to `.env`. Set `DATABRICKS_HOST` (https workspace URL), `DATABRICKS_TOKEN`, `DATABRICKS_WAREHOUSE_ID`, catalog and schema. Restart the server.
 4. Open Intelligence. The source badge must say Databricks SQL warehouse and show a statement ID. A failed configured query is shown as an error, with local charts explicitly identified as fallback.
 
-Credentials stay server-side. `.env` is ignored. Do not share it. Missing inputs: workspace host, authorized token, warehouse ID, and uploaded actions table. A real query cannot be verified until these are supplied. The other dashboard metrics remain computed by the local backend; only the waypoint chart switches to Databricks.
+Credentials stay server-side. `.env` is ignored. Do not share it or commit it. Copy `.env.example` to `.env` and set `DATABRICKS_HOST`, `DATABRICKS_TOKEN`, `DATABRICKS_WAREHOUSE_ID`, `DATABRICKS_CATALOG`, and `DATABRICKS_SCHEMA`. For the supplied Free Edition tables, use `workspace` and `spotlight` for the catalog and schema. The warehouse HTTP path is derived as `/sql/1.0/warehouses/<DATABRICKS_WAREHOUSE_ID>`.
+
+The backend uses the official `@databricks/sql` Node.js connector. It exposes these credential-protected server endpoints: `/api/databricks/health`, `/api/databricks/missions`, `/api/databricks/hidden-failures`, `/api/databricks/hotspots`, `/api/databricks/anomalies`, and `/api/databricks/reliability`. The Intelligence page loads these endpoints and reports connector loading or query errors clearly. SQL operations, sessions, and clients are closed after every request. The React client never receives the token.
 
 ## Data and calculation notes
 
