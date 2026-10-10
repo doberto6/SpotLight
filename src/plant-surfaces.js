@@ -1,5 +1,18 @@
 import * as THREE from 'three';
 
+// Poly Haven concrete_floor, CC0: three 1K maps, source scale 2.08 metres.
+// Geometry UVs are world metres, including the registered floor polygon.
+export function industrialFloorMaps(resources){
+  const loader=new THREE.TextureLoader(),maps={};
+  for(const [slot,file] of [['map','diffuse'],['roughnessMap','roughness'],['normalMap','normal']]){
+    const texture=loader.load('/textures/concrete_floor/'+file+'.jpg');
+    texture.wrapS=texture.wrapT=THREE.RepeatWrapping;texture.repeat.set(1/2.08,1/2.08);texture.anisotropy=4;
+    if(slot==='map')texture.colorSpace=THREE.SRGBColorSpace;
+    resources.push(texture);maps[slot]=texture;
+  }
+  return {...maps,normalScale:new THREE.Vector2(.18,.18)};
+}
+
 // Small deterministic tiles: no network dependency, subtle pores and aggregate,
 // and linear roughness/normal data rather than color used as a lighting map.
 export function concreteMaps(resources,repeat=[20,12],{joints=true,base=165,normalStrength=.32}={}) {

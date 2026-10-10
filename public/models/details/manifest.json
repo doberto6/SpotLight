@@ -1,0 +1,18 @@
+[
+  {
+    "name": "pipe_rack",
+    "bytes": 12236,
+    "triangles": 164,
+    "meshes": 1,
+    "license": "Project license",
+    "author": "SPOTlight original geometry"
+  },
+  {
+    "name": "maintenance_cart",
+    "bytes": 41832,
+    "triangles": 600,
+    "meshes": 4,
+    "license": "Project license",
+    "author": "SPOTlight original geometry"
+  }
+]

@@ -8,17 +8,19 @@ import {RenderPass} from 'three/addons/postprocessing/RenderPass.js';
 import {GTAOPass} from 'three/addons/postprocessing/GTAOPass.js';
 import {OutputPass} from 'three/addons/postprocessing/OutputPass.js';
 import {createSpot,updateSpotGait} from './spot-scene.js';
+import {calibrateSpot,createSpotHitbox} from './spot-hitbox.js';
+import {SPOT_COLLISION,blockedPose} from './spot-collision.mjs';
 import {createReplayEnvironment} from './replay-environment.js';
-import {sampleReplay,stepManual,angleDelta,worldPoint,stamp,recoveryRoute,pointOnPath,nextVisit,sourceTime} from './replay-engine.mjs';
+import {SIMULATION_WALK_SPEED,sampleReplay,stepManual,angleDelta,worldPoint,stamp,recoveryRoute,pointOnPath,nextVisit,sourceTime} from './replay-engine.mjs';
 
 import {createMissionMarkers} from './mission-markers.js';
 import {waypointFloor,floorAt} from './facility-layout.mjs';
 
 RectAreaLightUniformsLib.init();
 
-export default function SpotReplayScene({replay,route=replay,locations,anomalies,state,cameraMode,stopToken,selectedAnomaly,onAnomaly,onTelemetry,floor='all',selectedLocation,onSelect,onRecovery,overview=false,showLabels=true,showPath=true,roofMode='cutaway',cameraResetToken=0}) {
-  const hostRef=useRef(null),latest=useRef({}),[error,setError]=useState(''),[assetStatus,setAssetStatus]=useState({loaded:0,total:11,failed:[]});
-  latest.current={replay,state,cameraMode,stopToken,selectedAnomaly,onAnomaly,onTelemetry,floor,selectedLocation,onSelect,onRecovery,showLabels,showPath,roofMode,cameraResetToken};
+export default function SpotReplayScene({replay,route=replay,locations,anomalies,state,cameraMode,stopToken,selectedAnomaly,onAnomaly,onTelemetry,floor='all',selectedLocation,onSelect,onRecovery,overview=false,showLabels=true,showPath=true,showHitbox=true,roofMode='cutaway',cameraResetToken=0}) {
+  const hostRef=useRef(null),latest=useRef({}),[error,setError]=useState(''),[assetStatus,setAssetStatus]=useState({loaded:0,total:17,failed:[]});
+  latest.current={replay,state,cameraMode,stopToken,selectedAnomaly,onAnomaly,onTelemetry,floor,selectedLocation,onSelect,onRecovery,showLabels,showPath,showHitbox,roofMode,cameraResetToken};
   useEffect(()=>{
     const host=hostRef.current;let renderer;
     try{renderer=new THREE.WebGLRenderer({antialias:true});}catch{setError('3D graphics unavailable. Enable hardware acceleration to use the simulator.');return;}
@@ -33,9 +35,10 @@ export default function SpotReplayScene({replay,route=replay,locations,anomalies
     const composer=new EffectComposer(renderer,renderTarget),renderPass=new RenderPass(scene,camera),ao=new GTAOPass(scene,camera,1,1),output=new OutputPass();
     ao.updateGtaoMaterial({radius:.42,thickness:.8,distanceExponent:1.6});ao.blendIntensity=.32;
     composer.addPass(renderPass);composer.addPass(ao);composer.addPass(output);
-    const robot=createSpot(resources);robot.scale.setScalar(1.3);robot.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});scene.add(robot);
+    const robot=calibrateSpot(createSpot(resources)),hitbox=createSpotHitbox(robot,resources);robot.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});scene.add(robot);
     const initial=sampleReplay(replay,latest.current.state.time);robot.position.set(initial.x,0,initial.z);robot.rotation.y=initial.yaw;controls.target.set(initial.x,.7,initial.z);camera.position.set(initial.x-6,3.5,initial.z);controls.update();
     const missionMarkers=createMissionMarkers(scene,resources,locations,route);
+    const headingRoutes=new WeakMap();const usesHeadings=replay=>{if(!headingRoutes.has(replay))headingRoutes.set(replay,replay.segments.some(seg=>seg.path[0]?.yaw!==undefined));return headingRoutes.get(replay);};
     const flags=anomalies.map(a=>{
       const p=worldPoint(a.location_id),geo=new THREE.ConeGeometry(.25,.6,4),mat=new THREE.MeshBasicMaterial({color:a.severity==='CRITICAL'?'#ff718b':'#ffc65e'});resources.push(geo,mat);
       const flag=new THREE.Mesh(geo,mat);flag.position.set(p.x,1.9,p.z);flag.userData.anomaly=a;scene.add(flag);return flag;
@@ -72,11 +75,11 @@ export default function SpotReplayScene({replay,route=replay,locations,anomalies
 
       if(s.manual&&(live.floor==='all'||live.floor===floorAt(manualPose.x,manualPose.z)))manualPose=stepManual(manualPose,{forward:keys.has('w')||keys.has('arrowup')?1:0,backward:keys.has('s')||keys.has('arrowdown')?1:0,left:keys.has('a')||keys.has('arrowleft')?1:0,right:keys.has('d')||keys.has('arrowright')?1:0,stop:keys.has(' ')},dt);
       let recoveredPose=null;
-      if(recovery&&s.recovering){if(s.playing)recoveryDistance=Math.min(recovery.length,recoveryDistance+dt*1.5*s.speed);recoveredPose={...pointOnPath(recovery,recoveryDistance),floor:floorAt(manualPose.x,manualPose.z),speed:s.playing?1.5:0,destination:recovery.visit.location_id,location_id:manualPose.location_id};if(recoveryDistance>=recovery.length){heldPose=null;live.onRecovery?.({time:recovery.time});}}
+      if(recovery&&s.recovering){if(s.playing)recoveryDistance=Math.min(recovery.length,recoveryDistance+dt*SIMULATION_WALK_SPEED*s.speed);recoveredPose={...pointOnPath(recovery,recoveryDistance),floor:floorAt(manualPose.x,manualPose.z),speed:s.playing?SIMULATION_WALK_SPEED:0,destination:recovery.visit.location_id,location_id:manualPose.location_id};if(recoveryDistance>=recovery.length){heldPose=null;live.onRecovery?.({time:recovery.time});}}
       const pose=s.manual?manualPose:recoveredPose||heldPose||recorded,moving=s.manual?Math.abs(pose.speed)>.02:s.playing&&pose.speed>.001&&!pose.transfer;
-      robot.position.set(pose.x,0,pose.z);if(s.manual||pose.speed>.001)robot.rotation.y+=angleDelta(robot.rotation.y,pose.yaw)*(1-Math.exp(-dt*9));
+      robot.position.set(pose.x,0,pose.z);if(s.manual||recoveredPose||usesHeadings(replay))robot.rotation.y=pose.yaw;else if(pose.speed>.001)robot.rotation.y+=angleDelta(robot.rotation.y,pose.yaw)*(1-Math.exp(-dt*9));
       const gaitSpeed=moving?(s.manual?pose.speed:Math.hypot(pose.x-lastRobotX,pose.z-lastRobotZ)/Math.max(dt,.001)):0;
-      updateSpotGait(robot,dt,Math.sign(gaitSpeed)*Math.min(2.2,Math.abs(gaitSpeed)));lastRobotX=pose.x;lastRobotZ=pose.z;
+      updateSpotGait(robot,dt,Math.sign(gaitSpeed)*Math.min(SIMULATION_WALK_SPEED,Math.abs(gaitSpeed)));lastRobotX=pose.x;lastRobotZ=pose.z;
       target.set(pose.x,.75,pose.z);if(live.floor!=='all'&&live.floor!==(pose.floor||floorAt(pose.x,pose.z)))target.set(live.floor==='1'?-13:28,.75,0);direction.set(Math.cos(robot.rotation.y),0,-Math.sin(robot.rotation.y));
       if(mode!==lastMode||resetSeen!==live.cameraResetToken){resetSeen=live.cameraResetToken;transitionFrom.copy(camera.position);transitionStart=now;transitionActive=true;camera.up.set(0,1,0);camera.fov=55;camera.updateProjectionMatrix();controls.enabled=mode==='chase'||mode==='free';controls.enablePan=mode==='free';controls.minDistance=(mode==='free'&&!overview) ? .75 : 2;controls.maxPolarAngle=mode==='free'?Math.PI*.8:Math.PI/2-.06;controls.target.copy(target);camera.position.copy(target).add(new THREE.Vector3(-6*direction.x,3,-6*direction.z));if(!overview&&mode==='free'){controls.target.y=2.9;camera.position.copy(target).add(new THREE.Vector3(-8*direction.x,.9,-8*direction.z));}if(overview&&mode==='free'){controls.target.set(live.floor==='2'?28:live.floor==='1'?-13:0,.5,0);camera.position.set(controls.target.x,68,45);}controls.update();transitionTo.copy(camera.position);chaseOffset.copy(camera.position).sub(controls.target);lastMode=mode;lastYaw=robot.rotation.y;}
       if(mode==='chase'){
@@ -88,12 +91,12 @@ export default function SpotReplayScene({replay,route=replay,locations,anomalies
       else {camera.up.set(0,1,0);controls.update();camera.position.y=Math.max(.25,camera.position.y);
 
       }
-      if(transitionActive){const f=Math.min(1,(now-transitionStart)/450),destination=mode==='free'?transitionTo:mode==='chase'?desired:mode==='top'?new THREE.Vector3(target.x,topHeight,target.z+.01):camera.position.clone();camera.position.lerpVectors(transitionFrom,destination,f*f*(3-2*f));if(f===1)transitionActive=false;camera.lookAt(mode==='first'?target.clone().addScaledVector(direction,8):controls.target);}if(mode==='free'&&!overview){offset.copy(camera.position).sub(controls.target);cameraRay.set(controls.target,offset.clone().normalize());cameraRay.far=offset.length();const hit=cameraRay.intersectObjects(solids.filter(o=>o.userData.floor===floorAt(controls.target.x,controls.target.z)))[0];if(hit&&hit.distance>.6){camera.position.copy(controls.target).addScaledVector(offset.normalize(),Math.max(.5,hit.distance-.25));camera.lookAt(controls.target);}}if(mode!=='top')camera.up.set(0,1,0);lastYaw=robot.rotation.y;robot.visible=replay.visits.length>0&&mode!=='first'&&!pose.transfer&&(live.floor==='all'||live.floor===(pose.floor||floorAt(pose.x,pose.z)));
+      if(transitionActive){const f=Math.min(1,(now-transitionStart)/450),destination=mode==='free'?transitionTo:mode==='chase'?desired:mode==='top'?new THREE.Vector3(target.x,topHeight,target.z+.01):camera.position.clone();camera.position.lerpVectors(transitionFrom,destination,f*f*(3-2*f));if(f===1)transitionActive=false;camera.lookAt(mode==='first'?target.clone().addScaledVector(direction,8):controls.target);}if(mode==='free'&&!overview){offset.copy(camera.position).sub(controls.target);cameraRay.set(controls.target,offset.clone().normalize());cameraRay.far=offset.length();const hit=cameraRay.intersectObjects(solids.filter(o=>o.userData.floor===floorAt(controls.target.x,controls.target.z)))[0];if(hit&&hit.distance>.6){camera.position.copy(controls.target).addScaledVector(offset.normalize(),Math.max(.5,hit.distance-.25));camera.lookAt(controls.target);}}if(mode!=='top')camera.up.set(0,1,0);lastYaw=robot.rotation.y;hitbox.visible=live.showHitbox;robot.visible=replay.visits.length>0&&mode!=='first'&&!pose.transfer&&(live.floor==='all'||live.floor===(pose.floor||floorAt(pose.x,pose.z)));
       missionMarkers.update({time:s.time,floor:live.floor,playing:s.playing,manual:s.manual,recovering:s.recovering,selected:live.selectedLocation,anomalies,destination:pose.destination||nextVisit(replay,s.time)?.location_id,camera,now,showLabels:live.showLabels,sourceTime:sourceTime(replay,s.time),showPath:live.showPath,timeline:replay});
       for(const flag of flags){const a=flag.userData.anomaly;flag.visible=(live.floor==='all'||live.floor===waypointFloor(a.location_id))&&(stamp(a.timestamp)<=replay.start+sourceTime(replay,s.time)*1000||a.anomaly_id===live.selectedAnomaly?.anomaly_id);flag.scale.setScalar(a.anomaly_id===live.selectedAnomaly?.anomaly_id?1.6:1);}
       if(now-telemetryAt>100){live.onTelemetry({...pose,floor:pose.floor||floorAt(pose.x,pose.z),walking:moving,recovering:!!recoveredPose,held:!!heldPose});telemetryAt=now;}
       const renderStart=performance.now();renderer.info.autoReset=false;renderer.info.reset();composer.render();renderMs+=performance.now()-renderStart;frames++;
-      if(now-diagnosticAt>500){host.__spotDiagnostics={route:missionMarkers.path.snapshot(),roof:live.roofMode,ao:ao.enabled,camera:{near:camera.near,far:camera.far,position:camera.position.toArray(),target:controls.target.toArray(),mode},render:{backend,fps:frames*1000/Math.max(1,now-statsStart),cpuMs:renderMs/frames,calls:renderer.info.render.calls,triangles:renderer.info.render.triangles},pose:{x:pose.x,z:pose.z,yaw:robot.rotation.y},timeline:{time:s.time,duration:replay.duration,mode:s.mode,source:sourceTime(replay,s.time)},recoveryPlans:host.__recoveryPlans||0};diagnosticAt=now;}
+      if(now-diagnosticAt>500){host.__spotDiagnostics={route:missionMarkers.path.snapshot(),roof:live.roofMode,ao:ao.enabled,collision:{visible:hitbox.visible,dimensions:SPOT_COLLISION,id:hitbox.uuid,position:robot.position.toArray(),yaw:robot.rotation.y,blocked:blockedPose({x:pose.x,z:pose.z,yaw:robot.rotation.y})},camera:{near:camera.near,far:camera.far,position:camera.position.toArray(),target:controls.target.toArray(),mode},render:{backend,fps:frames*1000/Math.max(1,now-statsStart),cpuMs:renderMs/frames,calls:renderer.info.render.calls,triangles:renderer.info.render.triangles},pose:{x:pose.x,z:pose.z,yaw:robot.rotation.y},timeline:{time:s.time,duration:replay.duration,mode:s.mode,source:sourceTime(replay,s.time)},recoveryPlans:host.__recoveryPlans||0};diagnosticAt=now;}
       frameId=requestAnimationFrame(frame);
     };frame();
     return()=>{cancelAnimationFrame(frameId);environment.dispose();observer.disconnect();window.removeEventListener('keydown',keydown);window.removeEventListener('keyup',keyup);window.removeEventListener('blur',clear);host.removeEventListener('blur',clear);renderer.domElement.removeEventListener('pointerdown',pointerDown);renderer.domElement.removeEventListener('click',click);renderer.domElement.removeEventListener('wheel',wheel);controls.dispose();ao.dispose();ao.gtaoMaterial.dispose();ao.blendMaterial.dispose();output.dispose();composer.dispose();sun.shadow.dispose();for(const r of new Set(resources))r.dispose();renderer.dispose();renderer.domElement.remove();delete host.__resetSpotStats;delete host.__spotDiagnostics;delete host.__recoveryPlans;};

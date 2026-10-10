@@ -1,0 +1,17 @@
+# Industrial references and licenses
+
+These are architectural and material references, separate from the synthetic mission evidence. This directory did not exist before the October 10, 2026 geometry/collision pass. Existing project GLBs and screenshots were also inspected.
+
+| File | Source / author | License / use |
+| --- | --- | --- |
+| `architecture/manapouri.jpg` | [Manapouri power station](https://commons.wikimedia.org/wiki/File:00_1393_New_Zealand_-_Manapouri_Power_Station.jpg), W. Bulach, March 8, 2009 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), unmodified photograph; architectural reference only |
+| `architecture/walchensee.jpg` | [Walchensee turbine hall](https://commons.wikimedia.org/wiki/File:Central_hidroel%C3%A9ctrica_de_Walchensee,_Kochel,_Baviera,_Alemania,_2014-03-22,_DD_04.JPG), Diego Delso, March 22, 2014 | [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/), unmodified photograph; architectural reference only |
+| `materials/concrete_floor_01.jpg` | [Concrete Floor 01](https://polyhaven.com/a/concrete_floor_01), Poly Haven / Rob Tuytel | [CC0](https://polyhaven.com/license), actual 1K diffuse texture; comparison only |
+| `materials/rusty_metal_02.jpg` | [Rusty Metal 02](https://polyhaven.com/a/rusty_metal_02), Poly Haven | [CC0](https://polyhaven.com/license), actual 1K diffuse texture; comparison only |
+| `../public/textures/concrete_floor/{diffuse,roughness,normal}.jpg` | [Concrete Floor](https://polyhaven.com/a/concrete_floor), eye-candy.xyz / Poly Haven | [CC0](https://polyhaven.com/license), actual 1K diffuse, roughness and OpenGL normal maps, used in the renderer; source scale 2.08 × 2.08 m, indoor color adjustment in shader |
+
+The photographs retain their respective share-alike licenses; neither is mapped onto application geometry or presented as a mission capture. Their licenses do not replace the licenses of the code or other assets. No Poly Haven editorial preview renders are redistributed.
+
+Also consulted: [power-station interiors](https://commons.wikimedia.org/wiki/Category:Interiors_of_power_stations), [turbine halls](https://commons.wikimedia.org/wiki/Category:Turbine_halls), [Wien Energie / SPOT](https://bostondynamics.com/case-studies/spot-makes-austrias-largest-power-plant-safer/), [Southern Company / SPOT](https://bostondynamics.com/case-studies/southern-company/), [official SPOT specifications](https://bostondynamics.com/wp-content/uploads/2020/10/spot-specifications.pdf), [BlenderKit](https://www.blenderkit.com/), [Sketchfab pipeline assets](https://sketchfab.com/tags/pipeline), and [ambientCG](https://ambientcg.com/). Boston Dynamics material is used for engineering/visual reference only; its photographs are not redistributed here. The specification served from the supplied URL is dated May 22, 2024; robot dimensions are taken from the robot section, not the separate Dock section.
+
+No new marketplace model was downloaded without an asset-specific license. Existing prepared Sketchfab components retain their CC BY 4.0 metadata and [in-app attribution](../src/industrial-credits.mjs). The two new Blender models are original project geometry; see `public/models/details/manifest.json` and `scripts/build-industrial-details.py`. Connected Blender asset libraries were disabled, so this pass reused the already licensed libraries and created the missing metric rack/cart geometry directly in Blender.

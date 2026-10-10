@@ -1,0 +1,26 @@
+{
+  "hitboxTogglePreservesIdentity": true,
+  "manualHitboxMatchesPose": true,
+  "manualResume": {
+    "pausedAt": 1,
+    "oneRecoveryPlan": true,
+    "noTeleport": true
+  },
+  "demoWallSeconds": 75.024,
+  "automatedHitboxClear": true,
+  "render": {
+    "backend": "ANGLE (Apple, ANGLE Metal Renderer: Apple M3 Pro, Unspecified Version)",
+    "fps": 60.01257127818875,
+    "cpuMs": 1.5108724537679217,
+    "calls": 296,
+    "triangles": 302321
+  },
+  "duration": 75,
+  "missionChangesRoute": true,
+  "mobileOverflow": false,
+  "assets": 17,
+  "staticBuffersUnchanged": true,
+  "errors": [],
+  "warnings": [],
+  "svgGuideCoordinatesAndNodesUnchanged": true
+}

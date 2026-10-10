@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {loadData} from '../data.mjs';
 import {rooms,waypointPositions,worldPoint,worldToImage,floorAt,waypointFloor,markerColor,equipment} from '../src/facility-layout.mjs';
-import {routeBetween,clearSegment,blocked,pathMetrics,dottedPath,pointOnPath,buildReplay,buildSimulation,sourceTime,timelineTime,recoveryRoute,sampleReplay} from '../src/replay-engine.mjs';
+import {SIMULATION_WALK_SPEED,routeBetween,clearSegment,blocked,pathMetrics,dottedPath,pointOnPath,buildReplay,buildSimulation,sourceTime,timelineTime,recoveryRoute,sampleReplay} from '../src/replay-engine.mjs';
 
 test('all reference pins share reversible image registration, floor and room assignment',()=>{
  const data=loadData();assert.equal(rooms.length,15);assert.equal(Object.keys(waypointPositions).length,15);
@@ -21,7 +21,7 @@ test('every same-floor waypoint pair is reachable, including segment interiors a
 });
 test('simulation walks at estimated speed, keeps evidence time reversible and exposes unsupported transfers',()=>{
  const data=loadData();for(const mission of data.missions){const replay=buildReplay(mission,data.actions.filter(a=>a.mission_id===mission.mission_id),[]),sim=buildSimulation(replay);
- for(let i=0;i<sim.segments.length;i++){const seg=sim.segments[i],a=sim.nodes[i],b=sim.nodes[i+1];assert.ok(b.at>=a.at);if(seg.length)assert.ok(Math.abs(seg.length/((b.at-a.at)/1000)-1.5)<1e-8);if(seg.transfer){assert.equal(seg.length,0);assert.equal(sampleReplay(sim,(a.at+b.at)/2000).transfer,true);}}
+ for(let i=0;i<sim.segments.length;i++){const seg=sim.segments[i],a=sim.nodes[i],b=sim.nodes[i+1];assert.ok(b.at>=a.at);if(seg.length)assert.ok(Math.abs(seg.length/((b.at-a.at)/1000)-SIMULATION_WALK_SPEED)<1e-8);if(seg.transfer){assert.equal(seg.length,0);assert.equal(sampleReplay(sim,(a.at+b.at)/2000).transfer,true);}}
  for(const v of sim.visits){const t=timelineTime(sim,v.sourceAt/1000);assert.ok(Math.abs(t-v.at/1000)<1e-6);assert.ok(Math.abs(sourceTime(sim,t)-v.sourceAt/1000)<1e-6);}
  }
 });

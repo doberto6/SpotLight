@@ -41,4 +41,13 @@ export const equipment=rooms.filter(r=>!['access','warehouse','dock','pipes','va
   return {...p,w,d,h,type:r.equipment==='turbine_generator'?'generator':'equipment',asset:r.equipment,floor:r.floor,waypoint:r.id};
 });
 for(const [id,px,py,w,d,h,asset] of [['WP03',25.8,36,2,1.9,3.1,'pressure_vessel'],['WP03',25.8,45,2,1.9,3.1,'pressure_vessel'],['WP05',41,31,20,1.3,1.8,'pipes'],['WP05',41,47,20,1.3,1.8,'pipes'],['WP10',62,81,2,2.8,2.2,'valves'],['WP13',73,54,1.2,8,2.2,'warehouse'],['WP15',95,82,1.6,5,2.1,'dock']])equipment.push({...imageToWorld([px,py]),w,d,h,asset,type:'equipment',waypoint:id,floor:waypointFloor(id)});
+// Purposeful auxiliary systems along the rear of their operational bays.
+// Their foundations and collision rectangles are registered together.
+for(const [waypoint,x,z,w,d,h,asset,role] of [
+ ['WP04',-26,-19,1.6,2.4,1.6,'pump_skid','standby process pump'],
+ ['WP08',-16,14.5,1.6,1.6,2.2,'pressure_vessel','turbine lubrication reservoir'],
+ ['WP09',-2.8,14.5,2.4,2,1.7,'pump_skid','generator cooling pump'],
+ ['WP12',35.9,-7.5,2.4,2.4,1.7,'pump_skid','exchanger circulation pump'],
+ ['WP13',25.2,3.6,1.2,5.4,2.2,'warehouse','spare-parts rack']
+])equipment.push({waypoint,x,z,w,d,h,asset,role,type:'equipment',floor:waypointFloor(waypoint)});
 export const obstacles=[...walls,...equipment];

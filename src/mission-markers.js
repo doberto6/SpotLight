@@ -14,8 +14,9 @@ export function createMissionMarkers(scene,resources,locations,replay){
     replay=timeline;
     for(const m of markers){const id=m.loc.location_id,visible=floor==='all'||floor===m.loc.floor,visited=replay.visits.filter(v=>v.location_id===id&&v.at<=time*1000),done=visited.length>0&&visited.every(v=>(v.doneAt??v.at+Number(v.duration_sec||0)*1000)<=time*1000),flag=anomalies.some(a=>a.location_id===id&&stamp(a.timestamp)<=replay.start+sourceTime*1000),active=id===destination,chosen=id===selected;
       m.ring.visible=visible;m.sprite.visible=visible&&(showLabels||chosen||active);m.sprite.material.map=done?m.done:m.normal;m.sprite.material.color.set(flag?'#ff7373':'#ffffff');m.ring.material.color.set(flag?'#f24343':chosen?'#ffffff':m.color);m.ring.scale.setScalar(active?1.15+Math.sin(now*.004)*.15:chosen?1.4:1);
-      // Screen-size floor at distance; world-size cap prevents close-view occlusion.
-      const size=Math.min(2.4,Math.max(1.05,camera.position.distanceTo(m.sprite.position)*.045));m.sprite.scale.set(size*(chosen?1.15:1),size*.5,1);
+      // Preserve distant labels and cap their angular size when a wall moves
+      // the chase camera close to SPOT (notably the warehouse inspection).
+      const distance=camera.position.distanceTo(m.sprite.position),size=Math.min(2.4,Math.max(1.05,distance*.045),distance*.18);m.sprite.scale.set(size*(chosen?1.15:1),size*.5,1);
     }
   }
   return {pickables:markers.map(m=>m.sprite),path,update};

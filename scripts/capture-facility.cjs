@@ -9,7 +9,7 @@ const fs=require('node:fs');
   const settle=()=>page.waitForTimeout(1500),dir='docs/screenshots',phase=process.env.SPOT_PHASE||'before';fs.mkdirSync(dir,{recursive:true});
   await page.goto('http://localhost:3000');await page.getByRole('button',{name:'Mapping',exact:true}).click();await ready();await settle();
   await page.locator('.facility-3d').screenshot({path:dir+'/'+phase+'-overview.png'});
-  await page.getByRole('button',{name:'Mission Replay',exact:true}).click();await page.locator('.mission-label select').selectOption('M006');await ready();await page.getByLabel('Simulation floor').selectOption('1');await settle();
+  await page.getByRole('button',{name:'Mission Replay',exact:true}).click();await page.getByRole('button',{name:'View options'}).click();await page.locator('.mission-label select').selectOption('M006');await ready();await page.getByLabel('Simulation floor').selectOption('1');await settle();
   const viewport=page.locator('.spot-replay-canvas');await viewport.screenshot({path:dir+'/'+phase+'-walls.png'});
   if(process.env.SPOT_DETAIL){
    await page.getByRole('button',{name:'Fullscreen',exact:true}).click();

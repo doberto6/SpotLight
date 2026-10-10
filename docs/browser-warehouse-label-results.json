@@ -1,0 +1,18 @@
+{
+  "rooms": [
+    {
+      "waypoint": "WP13",
+      "floor": "2",
+      "mission": "M002",
+      "pose": {
+        "x": 21.120000000000005,
+        "z": 1.35,
+        "yaw": 0
+      },
+      "hitboxClear": true
+    }
+  ],
+  "mappingHitboxToggle": true,
+  "mappingMobileOverflow": false,
+  "errors": []
+}
