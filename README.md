@@ -80,3 +80,12 @@ Next team work: configure and verify Databricks, replace browser-local follow-up
 
 Databricks API reference: https://docs.databricks.com/api/statement-execution/v1/statement-execution
 
+# Mission Intelligence and System Health
+
+After configuring the backend `.env`, run `npm run databricks:setup` to create four SQL views using the existing six tables. The token needs SELECT on the raw tables and permission to create views in the configured schema. Alternatively execute `databricks/mission-intelligence.sql` in Databricks SQL Editor with your warehouse selected. The script uses `workspace.spotlight`; the setup command substitutes your configured catalog and schema. Re-running setup replaces these four analytics views.
+
+The Intelligence tab queries `/api/databricks/overview` for mission review indicators, hidden failures (completed missions with failed actions), historical waypoint failure rates, severity-prioritized anomalies, and configuration/action-type success rates. Clicking a mission, waypoint, or finding loads `/api/databricks/evidence?kind=mission|waypoint|action&id=...` from Databricks, including actions, anomalies, and sensor readings. SQL aggregates actions and anomalies separately to avoid duplicated mission counts. Heatmap thresholds are display bands: green below 15%, amber 15–29.9%, red at least 30%, and gray without observations. These are historical inspection failure rates, not predictions of equipment failure.
+
+System Health independently checks `/api/health` (backend uptime), `/api/databricks/health` (live warehouse query), and `/api/databricks/overview` (analytics views). Click Run checks to repeat them. Credentials remain on the backend. Intelligence has explicit loading, empty, and failure states and never substitutes local records for unavailable SQL results. Existing mission replay and reports continue using the supplied challenge dataset.
+
+For production: run `npm run build`, then `npm start`. Rebuild after frontend changes. Open `http://localhost:3000`.
