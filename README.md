@@ -27,6 +27,18 @@ Open the **3D Map** page or use the **2D / 3D** switch in Overview or Mission Re
 
 The 3D geometry is a schematic illustration. The challenge kit provides an image and waypoint metadata, but no measured building mesh, wall heights, or robot pose. Block placement is registered to the labels in the supplied floor-plan image and must not be interpreted as an accurate facility model or robot path.
 
+### Interactive Spot mission simulator
+
+Mission Replay reuses `createSpot` from the Mapping 3D page. It includes chase, free, top-down, and robot-perspective cameras, elapsed-time playback at 0.5×–4×, timeline scrubbing, ±10-second seeking, event jumps, and selectable anomaly markers with recorded sensor readings. The elapsed-time simulator works independently of the Mapping date filter.
+
+Take Control pauses recorded time and starts a simulated branch. Focus the viewport, then use W/S or up/down arrows to move, A/D or left/right arrows to turn, and Space to stop. Stop clears movement; Return to Replay discards the branch and restores the paused recorded position; Resume Mission restores it and continues playback. Changing missions resets the simulator. Keyboard control only applies while the viewport has focus.
+
+The plant partitions, doorway openings, machinery, and collision bounds are illustrative. Positions interpolate between timestamped waypoint visits and pause for recorded inspection durations. Routes avoid the illustrative obstacles; the dataset does not include continuous poses or surveyed paths. The first waypoint supplies the initial pose because the mission-start event contains no position. Replay timestamps retain the source clock; displayed X/Z values use schematic scene units, not surveyed coordinates. Historical readings and battery values remain labeled as recorded during manual control.
+
+Automated simulation uses the recorded route and can also be taken over manually. Both operating modes are simulation-only. No physical robot commands or connections are implemented. A future real-robot integration belongs in an authenticated backend with operator authorization, state verification, explicit handoff, emergency stop, and SDK safety controls. `replay-engine.mjs` separates replay state, routing, and collision handling from the renderer; `SpotReplayScene.jsx` reuses the robot model and manages cameras and keyboard input.
+
+`npm test` covers replay/manual transitions, time bounds and speed, recorded visit positions across all missions, inspection stops, and collision/routing behavior.
+
 ## Databricks: complete the real integration
 
 Local calculations are explicitly labeled and do **not** satisfy the Databricks sponsor requirement. The server already implements the SQL Statement Execution REST API and renders its results in Intelligence when configured.
@@ -47,7 +59,7 @@ Tables join on mission_id, action_id, location_id and asset_id. Loader validates
 - Completed with failures = distinct COMPLETED missions containing at least one FAILED action.
 - Failure rate = FAILED actions / all actions in group; success rate = SUCCESS actions / all actions.
 - Review required = operator_review_required equals True. Critical = severity equals CRITICAL.
-- Replay sorted by source timestamp, then event ID. Playback advances events at a chosen rate, not elapsed real time. The 500-event stream may cover only part of a mission; no missing events are fabricated.
+- Replay sorted by source timestamp, then event ID. Mapping advances events at a chosen rate; the Mission Replay simulator advances elapsed source time and interpolates waypoint visits. The 500-event stream may cover only part of a mission; no missing events are fabricated.
 - Source timestamps contain no timezone. UI preserves those strings without timezone conversion.
 - Supplied floor-plan artwork has labeled waypoint positions that do not match the CSV x/y coordinates. `positions` in `src/main.jsx` manually registers each *existing* marker to its position in the source image (percentage of image width/height). Location labels and floors come from CSV metadata. Cyan segments connect action waypoints schematically; they are not navigable robot trajectories. Floor selector filters overlays while retaining the original two-floor artwork.
 - Sample inspection images have no record-level links and are not presented as evidence for particular anomalies.
