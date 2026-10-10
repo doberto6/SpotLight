@@ -2,6 +2,26 @@
 
 A local, runnable operations console built from the supplied synthetic Knight Hacks SPOT challenge kit. React + Vite frontend, Node HTTP backend. No hardware connection or ML predictions.
 
+## Risk heatmap, sensor history, and mission reports
+
+The Intelligence tab includes an interactive failure-rate heatmap with floor and configuration filters. Selecting a waypoint loads SQL summaries of failed inspections, affected assets, and mission visits. A mission opens its report; an asset opens its sensor history. Green is below 15% failed actions, yellow is 15–29.9%, red is at least 30%, and gray means no inspections. These rates measure inspection reliability, separately from anomaly severity.
+
+Run `npm run databricks:setup` after updating the code. It creates the four mission intelligence views plus `workspace.spotlight.sensor_history`. Alternatively execute `databricks/sensor-trends.sql` in Databricks SQL Editor. The backend reads credentials from `.env`; SQL setup needs permission to create views. Intelligence and Reports run real SQL and can wake a stopped warehouse; System Health stays passive.
+
+Sensor baselines use window functions partitioned by asset, measurement type, and unit, ordered by timestamp and reading ID. Each reading is compared only with the prior 10 observations, using GOOD values and requiring at least 3 GOOD samples. A GOOD reading outside two population standard deviations is flagged. For a zero-variance baseline, a change exceeding 10% of the baseline magnitude (with a tiny numerical tolerance for zero) is flagged. Two flagged readings in the latest 5 observations indicate recurrence. Non-GOOD readings are shown for quality review and do not contribute to baselines. These are exploratory historical comparisons, not calibrated safety thresholds or failure predictions. Sparse series explicitly show insufficient history; no warnings are fabricated.
+
+New backend routes:
+- `GET /api/databricks/risk?configuration=all|V1|V2`
+- `GET /api/databricks/waypoint?location=WP09&configuration=all`
+- `GET /api/databricks/sensor-trends`
+- `GET /api/databricks/mission-report?mission=M006`
+
+Reports are printable mission records sourced from Databricks: outcome, findings, failed actions, historical waypoint context, sensor changes/quality flags, and a browser-local follow-up checklist. A database failure displays a report error; local mock results are never substituted. Dates from the challenge retain their recorded values. Report generation time is UTC.
+
+The Mapping 3D view shows a small image card only after SPOT reaches an inspection endpoint; a toggle hides it. The six photos in `04_ASSETS/sample_inspection_images` are synthetic examples without action-ID links. Matching is illustrative by inspection type (with pipe-gallery and valve examples at matching waypoints), and the UI identifies the photos as samples rather than mission captures. Mission Replay movement and controls remain intact.
+
+Validation: `npm test` covers existing replay/navigation, SQL filter validation, provided photo assets, and passive health checks. `node --env-file=.env scripts/verify-intelligence.mjs` verifies live SQL heatmap counts, all preceding-sample baselines and warning flags, waypoint evidence, and report joins. This live check executes SQL and may start the warehouse.
+
 ## Start
 
 Requires Node.js 22+ and npm. From this folder:

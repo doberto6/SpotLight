@@ -2,6 +2,7 @@ import React, {useEffect, useRef, useState} from 'react';
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {createSpot,createRoom,updateSpotGait} from './spot-scene.js';
+import {inspectionMedia} from './inspection-media.mjs';
 
 // Registered against the waypoint pins printed on the supplied floor-plan image.
 // These are image coordinates, not surveyed building coordinates.
@@ -26,8 +27,10 @@ function labelSprite(text, color) {
 export default function Facility3D({locations,actions,anomalies=[],events=[],replayIndex=0,replaySpeed=1,floor,current,selectedLocation,onSelect,motion=false,showLabels=true,simulation=false}) {
   const hostRef=useRef(null),apiRef=useRef(null),selectRef=useRef(onSelect),stateRef=useRef({});
   const [follow,setFollow]=useState(true);
+  const [visit,setVisit]=useState(null),[photos,setPhotos]=useState(true);
   const [error,setError]=useState('');selectRef.current=onSelect;stateRef.current={current,selectedLocation,motion,showLabels,floor,anomalies,events,replayIndex,replaySpeed,follow};
   useEffect(()=>{
+    setVisit(null);
     const host=hostRef.current;let renderer;
     try{renderer=new THREE.WebGLRenderer({antialias:true});}catch{setError('3D graphics unavailable. Switch to the 2D map.');return;}
     renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));renderer.outputColorSpace=THREE.SRGBColorSpace;host.appendChild(renderer.domElement);
@@ -73,7 +76,7 @@ export default function Facility3D({locations,actions,anomalies=[],events=[],rep
     const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();let down;
     const pointerDown=e=>{down=[e.clientX,e.clientY]};const click=e=>{if(!down||Math.hypot(e.clientX-down[0],e.clientY-down[1])>5)return;const rect=renderer.domElement.getBoundingClientRect();pointer.set((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1);raycaster.setFromCamera(pointer,camera);const hit=raycaster.intersectObjects(pickables.filter(o=>o.visible))[0];if(hit)selectRef.current(hit.object.userData.location);};renderer.domElement.addEventListener('pointerdown',pointerDown);renderer.domElement.addEventListener('click',click);
     const resize=()=>{const w=host.clientWidth,h=host.clientHeight;if(!w||!h)return;const halfHeight=Math.max(6.5,8.8/(w/h));camera.left=-halfHeight*w/h;camera.right=halfHeight*w/h;camera.top=halfHeight;camera.bottom=-halfHeight;camera.updateProjectionMatrix();renderer.setSize(w,h,false);};const observer=new ResizeObserver(resize);observer.observe(host);resize();
-    const visited=new Set();let lastFrame=performance.now(),frameId,lastIndex=-1,target=-1;
+    const visited=new Set();let lastFrame=performance.now(),frameId,lastIndex=-1,target=-1,shownVisit='';
     const frame=()=>{
       const now=performance.now(),delta=Math.min((now-lastFrame)/1000,.1);lastFrame=now;controls.update();
       const replay=stateRef.current;
@@ -90,9 +93,12 @@ export default function Facility3D({locations,actions,anomalies=[],events=[],rep
         if(stateRef.current.motion){
           // Ease toward the next recorded visit so SPOT visibly walks between rooms.
           if(target>=0)route.progress=THREE.MathUtils.damp(route.progress,target,3.5*replay.replaySpeed,delta);
+          // Snap the final fraction to the exact endpoint before marking an arrival.
+          if(target>=0&&Math.abs(route.progress-target)<.001)route.progress=target;
           // Only completed segments count as arrivals; the approaching endpoint stays unvisited.
         }
         if(target>=0)for(let n=0;n<=Math.floor(route.progress);n++)visited.add(ids[n]);
+        if(simulation&&particle.visible&&target>=0&&route.progress===target&&shownVisit!==routeActions[target].action_id){shownVisit=routeActions[target].action_id;setVisit(routeActions[target]);}
         const i=Math.floor(route.progress);particle.position.lerpVectors(points[i],points[Math.min(i+1,points.length-1)],route.progress-i);
         if(robot&&particle.visible){
           const travelled=robot.position.distanceTo(particle.position);
@@ -118,5 +124,6 @@ export default function Facility3D({locations,actions,anomalies=[],events=[],rep
     return()=>{cancelAnimationFrame(frameId);observer.disconnect();controls.dispose();renderer.domElement.removeEventListener('pointerdown',pointerDown);renderer.domElement.removeEventListener('click',click);for(const resource of resources)resource.dispose();renderer.dispose();renderer.domElement.remove();apiRef.current=null;};
   },[locations,actions,simulation]);
   useEffect(()=>{apiRef.current?.applyFloor?.();},[floor]);
-  return <div className="facility-3d clean-facility"><div className="facility-3d-canvas" ref={hostRef} role="img" aria-label={simulation?'3D SPOT mission simulation with raised rooms':'Interactive 3D view of the supplied facility floor plans'}/>{error?<p className="facility-3d-error" role="alert">{error}</p>:<div className="map-instructions">Drag to rotate · Scroll to zoom · Select a waypoint{simulation&&<label className="spot-follow"><input type="checkbox" checked={follow} onChange={e=>setFollow(e.target.checked)}/> Follow SPOT</label>}</div>}<button className="map-reset" onClick={()=>apiRef.current?.reset()}>Reset view</button><div className="map-key"><span>{simulation?'Yellow robot · SPOT':'● Waypoint'}</span><span className="amber">● Failed inspection</span><span className="cyan">━ Mission route</span>{simulation&&<span>Illustrative rooms and movement between recorded visits</span>}</div></div>;
+  const photo=inspectionMedia(visit);
+  return <div className="facility-3d clean-facility"><div className="facility-3d-canvas" ref={hostRef} role="img" aria-label={simulation?'3D SPOT mission simulation with raised rooms':'Interactive 3D view of the supplied facility floor plans'}/>{error?<p className="facility-3d-error" role="alert">{error}</p>:<div className="map-instructions">Drag to rotate · Scroll to zoom · Select a waypoint{simulation&&<label className="spot-follow"><input type="checkbox" checked={follow} onChange={e=>setFollow(e.target.checked)}/> Follow SPOT</label>}</div>}{simulation&&<button className="photo-toggle" aria-pressed={photos} onClick={()=>setPhotos(!photos)}>{photos?'Hide sample imagery':'Show sample imagery'}</button>}{simulation&&photos&&photo&&<figure className="visit-photo" key={visit.action_id}><div><span>{visit.location_id} / {visit.action_id}</span><b className={visit.status==='FAILED'?'red':'green'}>{visit.status}</b></div><img src={photo.url} alt={photo.title}/><figcaption><b>{photo.title}</b><span>{photo.provenance}</span><small>Example imagery, not a capture from this action.</small></figcaption></figure>}<button className="map-reset" onClick={()=>apiRef.current?.reset()}>Reset view</button><div className="map-key"><span>{simulation?'Yellow robot · SPOT':'● Waypoint'}</span><span className="amber">● Failed inspection</span><span className="cyan">━ Mission route</span>{simulation&&<span>Illustrative rooms and movement between recorded visits</span>}</div></div>;
 }

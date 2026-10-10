@@ -1,5 +1,5 @@
 import React,{useEffect,useState} from 'react';
-import {api} from './Intelligence.jsx';
+import {api} from './api.mjs';
 export default function SystemHealth(){
  const [checks,setChecks]=useState({}),[running,setRunning]=useState(false);
  async function run(){setRunning(true);setChecks({});await Promise.all([['backend','/api/health'],['databricks','/api/databricks/health']].map(async([name,url])=>{const start=performance.now();try{const data=await api(url);setChecks(c=>({...c,[name]:{ok:true,state:data.rows?.[0]?.state,ms:Math.round(performance.now()-start),at:new Date().toLocaleTimeString()}}))}catch(e){setChecks(c=>({...c,[name]:{ok:false,error:e.message,at:new Date().toLocaleTimeString()}}))}}));setRunning(false);}
