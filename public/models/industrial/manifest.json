@@ -1,0 +1,123 @@
+[
+  {
+    "source": "factory_modular_kit.glb",
+    "output": "factory_modular_kit.glb",
+    "sourceBytes": 335420104,
+    "outputBytes": 3725044,
+    "triangles": 4946,
+    "components": [
+      "Factory_modularKit_11_Trim_metal_0",
+      "Factory_modularKit_14_Trim_metal_0",
+      "Factory_modularKit_35_Trim_metal_0"
+    ],
+    "textureLimit": 768,
+    "preservedSceneTransforms": false,
+    "sourceMetadata": {
+      "extras": {
+        "author": "Thomas_Crozelon (https://sketchfab.com/Thomas_Crozelon)",
+        "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+        "source": "https://sketchfab.com/3d-models/factory-modular-kit-3213637ed81d41138c6746a13bf585b9",
+        "title": "Factory Modular kit"
+      },
+      "generator": "Sketchfab-17.8.0",
+      "version": "2.0"
+    }
+  },
+  {
+    "source": "industrial_electrical_box.glb",
+    "output": "industrial_electrical_box.glb",
+    "sourceBytes": 2074840,
+    "outputBytes": 978100,
+    "triangles": 8740,
+    "components": [
+      "Electrical Box_ElecticalBox_0",
+      "Electrical Door_ElecticalBox_0",
+      "Akumulator_ElecticalBox_0"
+    ],
+    "textureLimit": 768,
+    "preservedSceneTransforms": true,
+    "sourceMetadata": {
+      "extras": {
+        "author": "VRTESTER (https://sketchfab.com/VRTESTER)",
+        "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+        "source": "https://sketchfab.com/3d-models/industrial-electrical-box-de13c96dad014bf098df03030f314fee",
+        "title": "Industrial Electrical Box"
+      },
+      "generator": "Sketchfab-16.72.0",
+      "version": "2.0"
+    }
+  },
+  {
+    "source": "industrial_factory_with_towers_and_pipes.glb",
+    "output": "industrial_factory_with_towers_and_pipes.glb",
+    "sourceBytes": 29239608,
+    "outputBytes": 2763908,
+    "triangles": 9107,
+    "components": [
+      "Object_0"
+    ],
+    "textureLimit": 768,
+    "preservedSceneTransforms": true,
+    "sourceMetadata": {
+      "extras": {
+        "author": "jhonnq21 (https://sketchfab.com/jhonnq21)",
+        "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+        "source": "https://sketchfab.com/3d-models/industrial-factory-with-towers-and-pipes-73f30aa3f9c649338589f216a1409766",
+        "title": "Industrial factory with towers and pipes"
+      },
+      "generator": "Sketchfab-16.82.0",
+      "version": "2.0"
+    }
+  },
+  {
+    "source": "industrial_pipes_pack.glb",
+    "output": "industrial_pipes_pack.glb",
+    "sourceBytes": 14136796,
+    "outputBytes": 3167928,
+    "triangles": 5184,
+    "components": [
+      "Cylinder.036_Pipe_0",
+      "Cylinder.011_Pipe_0",
+      "Torus.001_Pipe_0"
+    ],
+    "textureLimit": 768,
+    "preservedSceneTransforms": false,
+    "sourceMetadata": {
+      "extras": {
+        "author": "Skotchet (https://sketchfab.com/Skotcher)",
+        "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+        "source": "https://sketchfab.com/3d-models/industrial-pipes-pack-116baf2d9f3949c482737b08b8e00a75",
+        "title": "Industrial Pipes pack"
+      },
+      "generator": "Sketchfab-12.68.0",
+      "version": "2.0"
+    }
+  },
+  {
+    "source": "large_modular_pipes_metal.glb",
+    "output": "large_modular_pipes_metal.glb",
+    "sourceBytes": 34907720,
+    "outputBytes": 2763144,
+    "triangles": 6062,
+    "components": [
+      "Pipe_RoundElbow_ModularPipes_Large_0",
+      "Pipe_BigValve_ModularPipes_Large_0",
+      "Pipe_Clamp_ModularPipes_Large_0",
+      "Pipe_SmallValve_ModularPipes_Large_0",
+      "Pipe_Straight4_ModularPipes_Large_0",
+      "Pipe_WallConnector_ModularPipes_Large_0"
+    ],
+    "textureLimit": 768,
+    "preservedSceneTransforms": false,
+    "sourceMetadata": {
+      "extras": {
+        "author": "Osian3D (https://sketchfab.com/OsianOHM)",
+        "license": "CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)",
+        "source": "https://sketchfab.com/3d-models/large-modular-pipes-metal-b62f50fa4acd4184a4bc8491a15b5379",
+        "title": "Large Modular Pipes (Metal)"
+      },
+      "generator": "Sketchfab-16.65.0",
+      "version": "2.0"
+    }
+  }
+]

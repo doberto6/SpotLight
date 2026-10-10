@@ -1,21 +1,23 @@
 import React,{useEffect,useRef,useState} from 'react';
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
 import {createSpot} from './spot-scene.js';
 import {createReplayEnvironment} from './replay-environment.js';
 import {sampleReplay,stepManual,angleDelta,worldPoint,stamp} from './replay-engine.mjs';
 
 export default function SpotReplayScene({replay,locations,anomalies,state,cameraMode,stopToken,selectedAnomaly,onAnomaly,onTelemetry}) {
-  const hostRef=useRef(null),latest=useRef({}),[error,setError]=useState('');
+  const hostRef=useRef(null),latest=useRef({}),[error,setError]=useState(''),[assetStatus,setAssetStatus]=useState({loaded:0,total:5,failed:[]});
   latest.current={state,cameraMode,stopToken,selectedAnomaly,onAnomaly,onTelemetry};
   useEffect(()=>{
     const host=hostRef.current;let renderer;
     try{renderer=new THREE.WebGLRenderer({antialias:true});}catch{setError('3D graphics unavailable. Enable hardware acceleration to use the simulator.');return;}
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));renderer.setClearColor('#102032');renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;host.appendChild(renderer.domElement);
-    const scene=new THREE.Scene();scene.fog=new THREE.Fog('#102032',28,95);scene.add(new THREE.HemisphereLight('#d8eeff','#415060',2));
-    const sun=new THREE.DirectionalLight('#fff0ce',3);sun.position.set(-15,30,12);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);sun.shadow.camera.left=-45;sun.shadow.camera.right=45;sun.shadow.camera.top=30;sun.shadow.camera.bottom=-30;sun.shadow.bias=-.001;scene.add(sun);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.5));renderer.setClearColor('#26394b');renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.05;host.appendChild(renderer.domElement);
+    const scene=new THREE.Scene();scene.fog=new THREE.Fog('#26394b',45,130);scene.add(new THREE.HemisphereLight('#dcecff','#5b6464',1.7));
+    const sun=new THREE.DirectionalLight('#ffedcf',2.4);sun.position.set(-15,30,12);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);sun.shadow.camera.left=-45;sun.shadow.camera.right=45;sun.shadow.camera.top=30;sun.shadow.camera.bottom=-30;sun.shadow.bias=-.001;sun.shadow.normalBias=.025;scene.add(sun);
     const camera=new THREE.PerspectiveCamera(55,1,.08,180),controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.minDistance=2;controls.maxDistance=60;controls.maxPolarAngle=Math.PI/2-.06;controls.enablePan=false;
-    const resources=[],{solids}=createReplayEnvironment(scene,resources,locations);
+    const resources=[],environment=createReplayEnvironment(scene,resources,locations,setAssetStatus),{solids}=environment;
+    const pmrem=new THREE.PMREMGenerator(renderer),room=new RoomEnvironment(),reflections=pmrem.fromScene(room,.05);scene.environment=reflections.texture;scene.environmentIntensity=.65;resources.push(reflections);room.dispose();pmrem.dispose();
     const robot=createSpot(resources);robot.scale.setScalar(2.2);robot.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});scene.add(robot);
     const initial=sampleReplay(replay,latest.current.state.time);robot.position.set(initial.x,0,initial.z);robot.rotation.y=initial.yaw;controls.target.set(initial.x,.7,initial.z);camera.position.set(initial.x-6,3.5,initial.z);controls.update();
     const flags=anomalies.map(a=>{
@@ -39,7 +41,7 @@ export default function SpotReplayScene({replay,locations,anomalies,state,camera
     const frame=()=>{
       const now=performance.now(),dt=Math.min((now-last)/1000,.05);last=now;
       const live=latest.current,{state:s,cameraMode:mode}=live,recorded=sampleReplay(replay,s.time);
-      if(s.manual&&!wasManual){manualPose={...recorded,speed:0};keys.clear();host.focus({preventScroll:true});}
+      if(s.manual&&!wasManual){manualPose={...recorded,speed:0};host.focus({preventScroll:true});}
       if(!s.manual&&wasManual)keys.clear();wasManual=s.manual;
       if(lastStop!==live.stopToken){keys.clear();manualPose.speed=0;lastStop=live.stopToken;}
       if(s.manual)manualPose=stepManual(manualPose,{forward:keys.has('w')||keys.has('arrowup')?1:0,backward:keys.has('s')||keys.has('arrowdown')?1:0,left:keys.has('a')||keys.has('arrowleft')?1:0,right:keys.has('d')||keys.has('arrowright')?1:0,stop:keys.has(' ')},dt);
@@ -61,7 +63,7 @@ export default function SpotReplayScene({replay,locations,anomalies,state,camera
       if(now-telemetryAt>100){live.onTelemetry({...pose,walking:moving});telemetryAt=now;}
       renderer.render(scene,camera);frameId=requestAnimationFrame(frame);
     };frame();
-    return()=>{cancelAnimationFrame(frameId);observer.disconnect();window.removeEventListener('keydown',keydown);window.removeEventListener('keyup',keyup);window.removeEventListener('blur',clear);host.removeEventListener('blur',clear);renderer.domElement.removeEventListener('pointerdown',pointerDown);renderer.domElement.removeEventListener('click',click);renderer.domElement.removeEventListener('wheel',wheel);controls.dispose();for(const r of resources)r.dispose();renderer.dispose();renderer.domElement.remove();};
+    return()=>{cancelAnimationFrame(frameId);environment.dispose();observer.disconnect();window.removeEventListener('keydown',keydown);window.removeEventListener('keyup',keyup);window.removeEventListener('blur',clear);host.removeEventListener('blur',clear);renderer.domElement.removeEventListener('pointerdown',pointerDown);renderer.domElement.removeEventListener('click',click);renderer.domElement.removeEventListener('wheel',wheel);controls.dispose();for(const r of new Set(resources))r.dispose();renderer.dispose();renderer.domElement.remove();};
   },[replay,locations,anomalies]);
-  return <div ref={hostRef} className="spot-replay-canvas" tabIndex={0} role="region" aria-label="Spot simulation viewport. In manual mode focus here and use WASD or arrow keys; Space stops.">{error&&<p className="spot-replay-error" role="alert">{error}</p>}</div>;
+  return <div ref={hostRef} className="spot-replay-canvas" tabIndex={0} role="region" aria-label="Spot simulation viewport. In manual mode focus here and use WASD or arrow keys; Space stops.">{error&&<p className="spot-replay-error" role="alert">{error}</p>}{assetStatus.loaded<assetStatus.total&&<span className="industrial-loading" role="status">Loading plant details · {assetStatus.loaded}/{assetStatus.total}</span>}{assetStatus.loaded===assetStatus.total&&assetStatus.failed.length>0&&<span className="industrial-loading" role="status">Some model details unavailable · procedural equipment active</span>}</div>;
 }

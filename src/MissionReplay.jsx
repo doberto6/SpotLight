@@ -1,7 +1,9 @@
 import React,{useMemo,useReducer,useEffect,useState,useRef} from 'react';
 import SpotReplayScene from './SpotReplayScene.jsx';
+import SpotMinimap from './SpotMinimap.jsx';
 import {buildReplay,initialReplayState,replayReducer,stamp,sampleReplay} from './replay-engine.mjs';
 import './mission-replay.css';
+import {industrialCredits} from './industrial-credits.mjs';
 
 const human=s=>String(s||'').replaceAll('_',' ').toLowerCase();
 const clock=seconds=>`${Math.floor(seconds/60)}:${String(Math.floor(seconds%60)).padStart(2,'0')}`;
@@ -12,6 +14,9 @@ export default function MissionReplay({data,mission,initialTimestamp,onInspect})
   const replay=useMemo(()=>buildReplay(mission,actions,events),[mission,actions,events]);
   const [state,dispatch]=useReducer(replayReducer,undefined,initialReplayState),[cameraMode,setCameraMode]=useState('chase'),[selectedAnomaly,setSelectedAnomaly]=useState(null),[pose,setPose]=useState(()=>sampleReplay(replay,0)),[stopToken,setStopToken]=useState(0);
   const lastTime=useRef(0);
+  const simulationRef=useRef(null),[fullscreen,setFullscreen]=useState(false),[fullscreenError,setFullscreenError]=useState('');
+  useEffect(()=>{const update=()=>setFullscreen(document.fullscreenElement===simulationRef.current);document.addEventListener('fullscreenchange',update);return()=>document.removeEventListener('fullscreenchange',update);},[]);
+  const toggleFullscreen=async()=>{setFullscreenError('');try{if(document.fullscreenElement===simulationRef.current)await document.exitFullscreen();else await simulationRef.current.requestFullscreen();}catch{setFullscreenError('Fullscreen unavailable in this browser. Try opening the app in a separate browser tab.');}};
   useEffect(()=>{if(initialTimestamp)dispatch({type:'seek',time:(stamp(initialTimestamp)-replay.start)/1000,duration:replay.duration});},[initialTimestamp,replay]);
   useEffect(()=>{
     if(!state.playing||state.manual)return;let id;lastTime.current=performance.now();
@@ -27,14 +32,18 @@ export default function MissionReplay({data,mission,initialTimestamp,onInspect})
   const battery=currentEvent?.details.battery_pct??currentAction?.battery_pct??mission.start_battery_pct;
   return <div className="spot-replay-workspace">
     <div className="spot-replay-main">
+      <div className="spot-simulation-stage" ref={simulationRef}>
       <section className="panel spot-simulation-panel">
         <div className="panel-head"><div><small>SIMULATION ONLY</small><h2>Spot mission simulator</h2></div><span className={'badge '+(state.manual?'manual-badge':'')}>{state.manual?'Manual simulation active':state.mode==='replay'?'Historical replay':'Automated simulation'}</span></div>
         <div className="spot-viewport">
           <SpotReplayScene replay={replay} locations={data.locations} anomalies={anomalies} state={state} cameraMode={cameraMode} stopToken={stopToken} selectedAnomaly={selectedAnomaly} onAnomaly={selectAnomaly} onTelemetry={setPose}/>
-          <div className="spot-viewport-tools"><label className="sr-only" htmlFor="spot-camera">Camera mode</label><select id="spot-camera" value={cameraMode} onChange={e=>setCameraMode(e.target.value)}><option value="chase">Third-person chase</option><option value="free">Free camera</option><option value="top">Top-down</option><option value="first">Robot perspective</option></select><button className="primary" onClick={takeover} disabled={state.manual}>Take Control</button></div>
+          <div className="spot-viewport-tools"><label className="sr-only" htmlFor="spot-camera">Camera mode</label><select id="spot-camera" value={cameraMode} onChange={e=>setCameraMode(e.target.value)}><option value="chase">Third-person chase</option><option value="free">Free camera</option><option value="top">Top-down</option><option value="first">Robot perspective</option></select><button className="primary" onClick={takeover} disabled={state.manual}>Take Control</button><button onClick={toggleFullscreen} aria-pressed={fullscreen}>{fullscreen?'Exit fullscreen':'Fullscreen'}</button></div>
           <div className="spot-viewport-hint">{state.manual?'Click the map · W/S move · A/D turn · Arrows also work · Space stops':'Drag to orbit · Scroll to zoom · Select a finding marker'}</div>
+          <SpotMinimap replay={replay} pose={pose} anomalies={anomalies} selectedAnomaly={selectedAnomaly} manual={state.manual}/>
         </div>
+        {fullscreenError&&<p className="spot-source-note" role="status">{fullscreenError}</p>}
         <p className="spot-source-note">Reuses the Mapping Spot model. Movement interpolates recorded waypoint visits through illustrative plant geometry; coordinates are schematic. No physical robot connection.</p>
+        <details className="industrial-credits"><summary>Industrial model credits</summary><p>Provided models identify CC BY 4.0 in their embedded metadata. Components were extracted, textures resized, and placement and scale adjusted.</p>{industrialCredits.map(asset=><div key={asset.file}><a href={asset.source} target="_blank" rel="noreferrer">{asset.title}</a><span> · {asset.author.split(' (')[0]} · <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">CC BY 4.0</a></span></div>)}</details>
       </section>
       <section className="panel spot-playback">
         <div className="panel-head"><div><small>MISSION TIMELINE</small><h2>{state.manual?'Manual branch · recording paused':'Follow the mission'}</h2></div><span className="muted">{timestamp.replace('T',' · ')} · source time</span></div>
@@ -45,6 +54,7 @@ export default function MissionReplay({data,mission,initialTimestamp,onInspect})
         <div className="spot-manual-buttons"><button onClick={()=>{setStopToken(n=>n+1);dispatch({type:'stop'});}}>Stop</button><button disabled={!state.manual} onClick={()=>{setStopToken(n=>n+1);dispatch({type:'resume',duration:replay.duration});}}>Resume Mission</button><button disabled={!state.manual} onClick={()=>{setStopToken(n=>n+1);dispatch({type:'return'});}}>Return to Replay</button></div>
         {state.manual&&<p className="manual-instructions">Manual controls move a simulated Spot from this timestamp. Return to Replay restores the recorded position; Resume Mission restores it and continues playback.</p>}
       </section>
+      </div>
       <details className="panel spot-event-list"><summary>Mission events · {events.length}</summary>{replay.events.map(e=><button className="record-row" key={e.event_id} onClick={()=>seek(e.at)}><span>{e.timestamp.split('T')[1]} · {human(e.event_type)}</span><span>{e.details.action_id||e.event_id}</span></button>)}</details>
     </div>
     <aside className="spot-replay-sidebar">

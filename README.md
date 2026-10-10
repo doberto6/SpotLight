@@ -39,6 +39,18 @@ Automated simulation uses the recorded route and can also be taken over manually
 
 `npm test` covers replay/manual transitions, time bounds and speed, recorded visit positions across all missions, inspection stops, and collision/routing behavior.
 
+### Detailed industrial environment
+
+Mission Replay now has concrete slabs, marked pedestrian corridors, glazed partitions, turbine/generator skids, boiler pressure vessels, pump/motor assemblies, switchgear, transformer fins and insulators, overhead piping with flanges and valves, cable trays, ducts, maintenance platforms and access rails, structural steel, equipment signs, and overhead fixtures. These additions reuse the existing collision footprints so recorded visit positions, mission timing, anomaly markers, and manual navigation remain compatible. The layout is illustrative, not a surveyed power plant.
+
+The five user-provided GLBs are curated into `public/models/industrial/` rather than loading their full source scenes. `factory_modular_kit` supplies structural columns, beams, and access components; `industrial_electrical_box` supplies cabinet assemblies; `industrial_pipes_pack` supplies pipe lengths, junctions, and handwheels; `large_modular_pipes_metal` supplies elbows, flanges, clamps, valves, and connectors. The merged `industrial_factory_with_towers_and_pipes` source contains roughly 580,000 triangles; its 9,107-triangle structural shell is used deliberately as an exterior generation-yard backdrop with distance LOD.
+
+Run `python3 scripts/prepare-industrial-assets.py --source-dir /path/to/source/models` on macOS to regenerate the prepared assets. This reads source files without modifying them, extracts selected meshes and their materials, repacks only the referenced vertex/index data, and downsamples textures to 768 pixels with `sips`. The prepared library is about 13 MB instead of nearly 400 MB. `manifest.json` records original sizes, extracted components, triangle counts, modifications, and embedded source metadata. Original scene transforms are retained for the electrical assembly and exterior shell; modular components are centered and fitted to their target equipment bays.
+
+All five sources carry CC BY 4.0 attribution in their embedded metadata; those credits and source links appear in the simulator's Industrial model credits disclosure and in `src/industrial-credits.mjs`. Geometry extraction, texture resizing, and scene placement are the modifications. See each source entry in `public/models/industrial/manifest.json` for its author and license information.
+
+The renderer uses PBR materials, environment reflections, ACES tone mapping, soft directional shadows, emissive indicators, and inexpensive contact shading. Procedural details and repeated imported components use GPU instancing, shared geometry/materials, and frustum culling. The exterior shell uses distance LOD. Detailed models load asynchronously while the navigable procedural environment is already available; a missing asset leaves its procedural equipment in place. Resource disposal covers imported textures/materials, GPU instances, late asynchronous loads, and the reflection target. Tests validate prepared GLB buffer ranges, asset attribution, and the download/polygon budget alongside existing replay and collision tests.
+
 ## Databricks: complete the real integration
 
 Local calculations are explicitly labeled and do **not** satisfy the Databricks sponsor requirement. The server already implements the SQL Statement Execution REST API and renders its results in Intelligence when configured.
