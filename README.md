@@ -21,6 +21,12 @@ Open http://localhost:3000. `npm test` verifies source joins, status logic, metr
 4. Intelligence shows waypoint failure rates and V1/V2 action success. Click a waypoint bar for underlying inspections.
 5. Reports shows selected-mission outcomes, anomaly readings and a browser-local review checklist. Print / Save PDF uses the browser print dialog.
 
+### Facility map views
+
+Open the **3D Map** page or use the **2D / 3D** switch in Overview or Mission Replay. The 3D view places simple room blocks and clickable waypoint labels over the supplied floor-plan artwork. Drag to rotate, scroll to zoom, choose a floor, or use Reset view. The waypoint strip below the scene provides keyboard-accessible access to every location. The active replay waypoint is highlighted in both views.
+
+The 3D geometry is a schematic illustration. The challenge kit provides an image and waypoint metadata, but no measured building mesh, wall heights, or robot pose. Block placement is registered to the labels in the supplied floor-plan image and must not be interpreted as an accurate facility model or robot path.
+
 ## Databricks: complete the real integration
 
 Local calculations are explicitly labeled and do **not** satisfy the Databricks sponsor requirement. The server already implements the SQL Statement Execution REST API and renders its results in Intelligence when configured.
