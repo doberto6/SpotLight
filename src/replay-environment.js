@@ -1,16 +1,18 @@
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {obstacles,bounds,worldPoint} from './replay-engine.mjs';
+import {engineeredAssetNames,equipmentAsset,equipmentPlacements} from './engineered-assets.mjs';
+import {concreteMaps} from './plant-surfaces.js';
 
 export const industrialAssetNames=['factory_modular_kit','industrial_electrical_box','industrial_factory_with_towers_and_pipes','industrial_pipes_pack','large_modular_pipes_metal'];
 
 export function createReplayEnvironment(scene,resources,locations,onAssets=()=>{}) {
-  let disposed=false;const solids=[],geometryCache=new Map(),batches=new Map();
+  let disposed=false,activeFallback=null;const solids=[],geometryCache=new Map(),batches=new Map(),equipmentFallbacks=new Map();
   const keep=r=>{resources.push(r);return r;};
   const material=(color,roughness=.65,metalness=.25,extra={})=>keep(new THREE.MeshStandardMaterial({color,roughness,metalness,...extra}));
   const m={steel:material('#445968',.35,.8),silver:material('#a0adb4',.3,.8),blue:material('#397680',.5,.55),green:material('#597666',.6,.4),yellow:material('#d4a63d',.5,.35),dark:material('#20313e'),wall:material('#b3b6ad',.95,.02),red:material('#ab4a3e',.5,.45),black:material('#222c34'),glass:material('#89b8bd',.18,.25,{transparent:true,opacity:.24,depthWrite:false}),light:material('#d5edee',.4,.1,{emissive:'#a5e8eb',emissiveIntensity:1.1}),status:material('#7adac9',.3,.2,{emissive:'#4fd2b6',emissiveIntensity:1.5})};
   function geo(kind){if(!geometryCache.has(kind))geometryCache.set(kind,keep(kind==='box'?new THREE.BoxGeometry(1,1,1):kind==='cylinder'?new THREE.CylinderGeometry(1,1,1,20):kind==='sphere'?new THREE.SphereGeometry(1,16,10):new THREE.TorusGeometry(1,.12,8,24)));return geometryCache.get(kind);}
-  function batch(kind,mat,matrix){const key=kind+':'+mat.uuid;if(!batches.has(key))batches.set(key,{geometry:geo(kind),material:mat,matrices:[]});batches.get(key).matrices.push(matrix.clone());}
+  function batch(kind,mat,matrix){const key=kind+':'+mat.uuid+':'+(activeFallback?.uuid||'static');if(!batches.has(key))batches.set(key,{geometry:geo(kind),material:mat,matrices:[],group:activeFallback});batches.get(key).matrices.push(matrix.clone());}
   // Repeated procedural details share geometry/material and become GPU instances.
   function shape(kind,size,pos,mat,rotation=[0,0,0],collision=false){
     const mesh=new THREE.Mesh(geo(kind),mat);mesh.position.set(...pos);mesh.scale.set(...size);mesh.rotation.set(...rotation);mesh.updateMatrix();
@@ -24,12 +26,7 @@ export function createReplayEnvironment(scene,resources,locations,onAssets=()=>{
     const c=document.createElement('canvas');c.width=512;c.height=128;const ctx=c.getContext('2d');ctx.fillStyle='#152a36';ctx.fillRect(0,0,512,128);ctx.fillStyle=color;ctx.fillRect(0,0,10,128);ctx.fillStyle='#edf5ed';ctx.font='bold 34px Arial';ctx.textAlign='center';ctx.fillText(text,260,77,470);
     const texture=keep(new THREE.CanvasTexture(c));texture.colorSpace=THREE.SRGBColorSpace;const material=keep(new THREE.MeshBasicMaterial({map:texture,side:THREE.DoubleSide}));const plane=keep(new THREE.PlaneGeometry(width,width/4)),mesh=new THREE.Mesh(plane,material);mesh.position.set(x,y,z);mesh.rotation.y=yaw;scene.add(mesh);
   }
-  function concreteTexture(){
-    const c=document.createElement('canvas');c.width=c.height=256;const ctx=c.getContext('2d');let seed=713;
-    for(let y=0;y<256;y++)for(let x=0;x<256;x++){seed=(Math.imul(seed,1664525)+1013904223)>>>0;const v=143+(seed%19);ctx.fillStyle='rgb('+v+','+(v+3)+','+(v+1)+')';ctx.fillRect(x,y,1,1);}
-    ctx.strokeStyle='#737f7d';ctx.lineWidth=1;ctx.strokeRect(0,0,256,256);const texture=keep(new THREE.CanvasTexture(c));texture.colorSpace=THREE.SRGBColorSpace;texture.wrapS=texture.wrapT=THREE.RepeatWrapping;texture.repeat.set(20,12);texture.anisotropy=4;return texture;
-  }
-  const concrete=material('#99a6a7',.94,.03,{map:concreteTexture()});
+  const concrete=material('#c4c5bc',1,.02,concreteMaps(resources));
   const floor=new THREE.Mesh(keep(new THREE.BoxGeometry(80,.2,45)),concrete);floor.position.y=-.1;floor.receiveShadow=true;scene.add(floor);
   // Operator pathways and bay boundaries replace the floor-plan poster on the ground.
   const marking=material('#d8c27c',.8,.05),path=material('#628f88',.9,.05);
@@ -53,6 +50,9 @@ export function createReplayEnvironment(scene,resources,locations,onAssets=()=>{
     const contact=new THREE.Mesh(shadowGeometry,shadowMaterial);contact.rotation.x=-Math.PI/2;contact.scale.set(o.w+2,o.d+2,1);contact.position.set(o.x,.009,o.z);scene.add(contact);
     box([o.w+.1,.16,o.d+.1],[o.x,.08,o.z],m.dark);
     for(const side of [-1,1])box([o.w,.015,.06],[o.x,.015,o.z+side*(o.d/2+.08)],marking);
+    const asset=equipmentAsset(o);
+    if(!equipmentFallbacks.has(asset)){const group=new THREE.Group();scene.add(group);equipmentFallbacks.set(asset,group);}
+    activeFallback=equipmentFallbacks.get(asset);
     if(o.type==='generator'){
       cyl(.83,2.8,[o.x,1.1,o.z],m.blue,[Math.PI/2,0,0]);cyl(.92,.15,[o.x,1.1,o.z-1.3],m.silver,[Math.PI/2,0,0]);
       for(let i=0;i<7;i++)cyl(.85,.05,[o.x,1.1,o.z-1+i*.34],m.steel,[Math.PI/2,0,0]);
@@ -80,6 +80,7 @@ export function createReplayEnvironment(scene,resources,locations,onAssets=()=>{
       for(const dx of [-.6,0,.6]){cyl(.1,.65,[o.x+dx,1.95,o.z],m.wall);for(let i=0;i<4;i++)cyl(.18,.04,[o.x+dx,1.7+i*.12,o.z],m.wall);}
       sign('TRANSFORMER / TX',o.x,2.65,o.z+1.22,2.8);
     }
+    activeFallback=null;
   }
   for(const z of [bounds.minZ,bounds.maxZ])wall(0,z,80,.3,4.2);
   for(const x of [bounds.minX,bounds.maxX])wall(x,0,.3,45,4.2);
@@ -97,6 +98,20 @@ export function createReplayEnvironment(scene,resources,locations,onAssets=()=>{
     box([.16,2,.16],[x,5.7,-21],m.steel);box([.16,2,.16],[x,5.7,21],m.steel);box([.15,.25,42],[x,6.8,0],m.steel);
     for(const z of [-6,6]){box([2,.13,.45],[x,6.5,z],m.dark);box([1.8,.04,.3],[x,6.41,z],m.light);}
   }
+  // Underside-only roof panels provide an interior ceiling in robot/chase views
+  // while allowing the same unobstructed cutaway in top-down views.
+  const roofGeo=keep(new THREE.PlaneGeometry(78,9)),roofMat=material('#858d89',.89,.15);
+  for(const z of [-15,0,15]){
+    const panel=new THREE.Mesh(roofGeo,roofMat);panel.position.set(0,7.1,z);panel.rotation.x=Math.PI/2;scene.add(panel);
+    for(let x=-38;x<=38;x+=2)box([.035,.07,9],[x,7.02,z],m.silver);
+  }
+  // Maintenance stations and service details stay on existing machinery pads.
+  for(const x of [-28,-12,4,26])for(const z of [-16,16]){
+    for(let dx=-1.1;dx<=1.1;dx+=.2)box([.075,.016,.24],[x+dx,.02,z+1.26],m.yellow);
+    pipe([x-.85,2.45,z+.65],[x+.85,2.45,z+.65],.035,m.yellow);
+    for(const dx of [-.85,.85])pipe([x+dx,.2,z+.65],[x+dx,2.45,z+.65],.025,m.steel);
+    sign('INSPECT / '+(x<0?'MECHANICAL':'ELECTRICAL'),x,2.32,z+.66,1.45);
+  }
   // Maintenance access stays over equipment footprints, away from mission routes.
   box([2.8,.12,2.2],[-28,2.8,16],m.steel);for(let x=-29.3;x<=-26.7;x+=.65)pipe([x,2.8,17],[x,3.8,17],.035,m.yellow);pipe([-29.3,3.8,17],[-26.7,3.8,17],.035,m.yellow);
   for(const dx of [-.3,.3])pipe([-28+dx,.1,17.1],[-28+dx,3,17.1],.035,m.silver);for(let y=.3;y<3;y+=.3)pipe([-28.3,y,17.1],[-27.7,y,17.1],.025,m.silver);
@@ -111,7 +126,7 @@ export function createReplayEnvironment(scene,resources,locations,onAssets=()=>{
   }
   sign('GENERATION / BOILER HOUSE',-50.4,5.5,0,7,'#d6ac4d',Math.PI/2);
   for(const loc of locations){const p=worldPoint(loc.location_id);const ring=new THREE.Mesh(keep(new THREE.RingGeometry(.42,.48,32)),keep(new THREE.MeshBasicMaterial({color:'#4eaea5',transparent:true,opacity:.7,side:THREE.DoubleSide})));ring.rotation.x=-Math.PI/2;ring.position.set(p.x,.021,p.z);scene.add(ring);}
-  for(const {geometry,material,matrices} of batches.values()){const mesh=new THREE.InstancedMesh(geometry,material,matrices.length);matrices.forEach((matrix,i)=>mesh.setMatrixAt(i,matrix));mesh.castShadow=false;mesh.receiveShadow=true;mesh.computeBoundingSphere();scene.add(mesh);keep(mesh);}
+  for(const {geometry,material,matrices,group} of batches.values()){const mesh=new THREE.InstancedMesh(geometry,material,matrices.length);matrices.forEach((matrix,i)=>mesh.setMatrixAt(i,matrix));mesh.castShadow=false;mesh.receiveShadow=true;mesh.computeBoundingSphere();(group||scene).add(mesh);keep(mesh);}
 
   function disposeModel(root){const items=[];root.traverse(o=>{if(o.geometry)items.push(o.geometry);for(const mat of [].concat(o.material||[])){items.push(mat);for(const v of Object.values(mat))if(v?.isTexture)items.push(v);}});for(const r of new Set(items))r.dispose();}
   function registerModel(root){root.traverse(o=>{if(o.geometry)keep(o.geometry);if(o.material)for(const mat of [].concat(o.material)){keep(mat);for(const value of Object.values(mat))if(value?.isTexture)keep(value);}});}
@@ -122,13 +137,13 @@ export function createReplayEnvironment(scene,resources,locations,onAssets=()=>{
     template.traverse(child=>{if(!child.isMesh)return;const instance=new THREE.InstancedMesh(child.geometry,child.material,positions.length);positions.forEach((p,i)=>{const transform=new THREE.Matrix4().makeTranslation(...p);instance.setMatrixAt(i,transform.multiply(child.matrixWorld));});instance.castShadow=castShadow;instance.receiveShadow=true;instance.computeBoundingSphere();scene.add(instance);keep(instance);});
   }
   function mesh(root,fragment){let match;root.traverse(o=>{if(o.isMesh&&o.name.includes(fragment))match=o;});return match;}
-  const loader=new GLTFLoader();let count=0;onAssets({loaded:0,total:industrialAssetNames.length,failed:[]});const failed=[];
+  const loader=new GLTFLoader();let count=0;const total=industrialAssetNames.length+engineeredAssetNames.length;onAssets({loaded:0,total,failed:[]});const failed=[];
   const jobs=industrialAssetNames.map(async name=>{
     try{
       const gltf=await loader.loadAsync('/models/industrial/'+name+'.glb');
       if(disposed){disposeModel(gltf.scene);return;}
       registerModel(gltf.scene);
-      if(name==='industrial_electrical_box')instantiate(gltf.scene,[1.05,1.6,1],cabinetPlacements.map(p=>[p[0],.25,p[2]+.22]));
+      if(name==='industrial_electrical_box')instantiate(gltf.scene,[.5,.75,.28],cabinetPlacements.map(p=>[p[0],1.1,p[2]-.87]));
       if(name==='factory_modular_kit'){
         const column=mesh(gltf.scene,'_11_'),beam=mesh(gltf.scene,'_14_'),access=mesh(gltf.scene,'_35_');
         if(column)instantiate(column,[.9,5.5,.9],[-30,-10,10,30].flatMap(x=>[-23,23].map(z=>[x,0,z])),[0,0,0],true);
@@ -156,7 +171,18 @@ export function createReplayEnvironment(scene,resources,locations,onAssets=()=>{
         const scale=28/Math.max(s.x,s.y,s.z);shell.scale.setScalar(scale);shell.position.set(-c.x*scale,-b.min.y*scale,-c.z*scale);lod.addLevel(shell,0);lod.addLevel(new THREE.Group(),85);lod.position.set(-56,0,0);scene.add(lod);
       }
     }catch(e){failed.push(name);console.warn('Industrial component unavailable:',name,e.message);}
-    finally{if(!disposed)onAssets({loaded:++count,total:industrialAssetNames.length,failed:[...failed]});}
+    finally{if(!disposed)onAssets({loaded:++count,total,failed:[...failed]});}
   });
+  jobs.push(...engineeredAssetNames.map(async name=>{
+    try{
+      const gltf=await loader.loadAsync('/models/engineered/'+name+'.glb');
+      if(disposed){disposeModel(gltf.scene);return;}
+      registerModel(gltf.scene);
+      const placements=equipmentPlacements(name);
+      instantiate(gltf.scene,placements[0].size,placements.map(p=>p.position),[0,0,0],true);
+      equipmentFallbacks.get(name).visible=false;
+    }catch(e){failed.push(name);console.warn('Engineered component unavailable:',name,e.message);}
+    finally{if(!disposed)onAssets({loaded:++count,total,failed:[...failed]});}
+  }));
   return {solids,floor,ready:Promise.all(jobs),dispose:()=>{disposed=true;}};
 }

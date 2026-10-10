@@ -1,7 +1,7 @@
 import React, {useEffect, useRef, useState} from 'react';
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
-import {createSpot,createRoom} from './spot-scene.js';
+import {createSpot,createRoom,updateSpotGait} from './spot-scene.js';
 
 // Registered against the waypoint pins printed on the supplied floor-plan image.
 // These are image coordinates, not surveyed building coordinates.
@@ -95,11 +95,12 @@ export default function Facility3D({locations,actions,anomalies=[],events=[],rep
         if(target>=0)for(let n=0;n<=Math.floor(route.progress);n++)visited.add(ids[n]);
         const i=Math.floor(route.progress);particle.position.lerpVectors(points[i],points[Math.min(i+1,points.length-1)],route.progress-i);
         if(robot&&particle.visible){
+          const travelled=robot.position.distanceTo(particle.position);
           robot.visible=true;robot.position.copy(particle.position);robot.position.y=0;
           const next=points[Math.min(i+1,points.length-1)],previous=points[i];
           if(next.distanceToSquared(previous)>.001)robot.rotation.y=-Math.atan2(next.z-previous.z,next.x-previous.x);
           const walking=replay.motion&&route.progress<target;
-          robot.userData.legs.forEach((leg,n)=>leg.rotation.z=walking?Math.sin(now*.012+(n===0||n===3?0:Math.PI))*.35:0);
+          updateSpotGait(robot,delta,walking?Math.min(3,travelled/Math.max(delta,.001)):0);
           if(replay.follow){const offset=camera.position.clone().sub(controls.target);controls.target.lerp(robot.position,.06);camera.position.copy(controls.target).add(offset);}
           particle.visible=false;
         }

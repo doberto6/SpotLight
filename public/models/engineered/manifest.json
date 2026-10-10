@@ -1,0 +1,77 @@
+[
+  {
+    "name": "pump_skid",
+    "output": "pump_skid.glb",
+    "outputBytes": 739260,
+    "triangles": 12712,
+    "meshes": 7,
+    "dimensionsBlender": [
+      2.649999976158142,
+      2.049999952316284,
+      1.7581865713000298
+    ],
+    "author": "SPOTlight project \u2014 original procedural geometry",
+    "license": "Project license",
+    "textureLimit": 128
+  },
+  {
+    "name": "turbine_generator",
+    "output": "turbine_generator.glb",
+    "outputBytes": 364612,
+    "triangles": 5148,
+    "meshes": 5,
+    "dimensionsBlender": [
+      2.1800001859664917,
+      3.6500000953674316,
+      2.1219999715685844
+    ],
+    "author": "SPOTlight project \u2014 original procedural geometry",
+    "license": "Project license",
+    "textureLimit": 128
+  },
+  {
+    "name": "pressure_vessel",
+    "output": "pressure_vessel.glb",
+    "outputBytes": 315844,
+    "triangles": 4640,
+    "meshes": 4,
+    "dimensionsBlender": [
+      2.2499998807907104,
+      1.850000023841858,
+      2.210000269114971
+    ],
+    "author": "SPOTlight project \u2014 original procedural geometry",
+    "license": "Project license",
+    "textureLimit": 128
+  },
+  {
+    "name": "oil_transformer",
+    "output": "oil_transformer.glb",
+    "outputBytes": 400920,
+    "triangles": 5776,
+    "meshes": 5,
+    "dimensionsBlender": [
+      2.5500000715255737,
+      2.0199999809265137,
+      2.2400000020861626
+    ],
+    "author": "SPOTlight project \u2014 original procedural geometry",
+    "license": "Project license",
+    "textureLimit": 128
+  },
+  {
+    "name": "control_cabinets",
+    "output": "control_cabinets.glb",
+    "outputBytes": 366408,
+    "triangles": 3408,
+    "meshes": 6,
+    "dimensionsBlender": [
+      2.3000000715255737,
+      1.4079999923706055,
+      2.2450001165270805
+    ],
+    "author": "SPOTlight project \u2014 original procedural geometry",
+    "license": "Project license",
+    "textureLimit": 128
+  }
+]
