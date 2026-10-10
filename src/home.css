@@ -1,10 +1,11 @@
 .home-shell{max-width:1600px;padding:clamp(28px,5vh,60px) 4%;min-height:calc(100svh - 144px)}
 .home-hero{display:grid;grid-template-columns:1.1fr 1fr;gap:24px;align-items:start;min-height:calc(100svh - 240px)}
 .home-copy{position:relative;z-index:1;padding-top:12px}
-.home-copy small{color:#91a9bd;font-size:10px;letter-spacing:2px}
+.home-copy small{color:var(--muted);font-size:10px;letter-spacing:2px}
 .home-copy h1{font-size:clamp(48px,6.4vw,100px);line-height:1.04;letter-spacing:-.055em;margin:28px 0 24px;font-weight:700}
-.home-copy h1 span{color:#38bdf8}
-.home-copy p{color:#9badc4;font-size:clamp(14px,1.3vw,18px);max-width:400px;line-height:1.7}
+.home-copy h1 span{color:var(--accent)}
+.home-copy p{color:var(--muted);font-size:clamp(14px,1.3vw,18px);max-width:400px;line-height:1.7}
 .home-spot{height:clamp(320px,65vh,600px);width:100%;min-width:0;background:radial-gradient(ellipse at center,#23344880,transparent 68%)}
 .home-spot canvas{display:block;width:100%;height:100%}
+.home-portrait{position:relative;min-width:0}.home-portrait .home-spot{height:clamp(300px,58vh,550px)}.home-model-switch{display:block;margin:-14px auto 0;position:relative;background:transparent;color:var(--muted);border-color:var(--line);font-size:11px;padding:8px 12px;border-radius:30px}.home-model-switch:hover{color:var(--text)}
 @media(max-width:760px){.home-hero{grid-template-columns:1fr;gap:0;min-height:0}.home-copy h1{font-size:clamp(44px,9vw,68px)}.home-spot{height:320px}.home-shell{padding-top:24px}}
