@@ -24,8 +24,10 @@ header{background:var(--canvas);height:104px;border-color:var(--line)}
 .brand-type{display:grid;gap:6px}.brand-word{font-size:32px;line-height:1;letter-spacing:-1.3px;font-weight:700;display:flex;align-items:baseline}
 .brand-word>span{font-weight:400;color:var(--accent)}.brand-word i{font:9px var(--body);font-style:normal;align-self:start;margin:2px 0 0 4px;opacity:.5}
 .brand-caption{font:8px var(--body);letter-spacing:2px;color:var(--muted)}
-.theme-picker{display:grid;gap:5px;font-size:9px;letter-spacing:1.5px;color:var(--muted)}
-.theme-picker select{font-size:11px;letter-spacing:0;padding:7px 26px 7px 10px;background:var(--surface);color:var(--text);border-color:var(--line)}
+.theme-picker{position:relative;display:flex;align-items:center;font-size:9px;letter-spacing:1.5px;color:var(--muted)}
+.theme-picker>span{position:absolute;bottom:calc(100% + 5px);left:0}
+.theme-picker select{font-size:11px;letter-spacing:0;padding:7px 30px 7px 10px;background:var(--surface);color:var(--text);border-color:var(--line)}
+select:not([multiple]):not([size]),select[size="1"]{appearance:none;padding-right:32px!important;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='m1 1 4 4 4-4' fill='none' stroke='%239aaba3' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")!important;background-position:right 12px center!important;background-size:10px 6px!important;background-repeat:no-repeat!important}
 nav{height:58px;border-color:var(--line);gap:32px}nav button{font-weight:600;font-size:12px;letter-spacing:.2px;color:var(--muted)}nav button.active{color:var(--accent);border-color:var(--accent)}
 button,select,input{font-family:var(--body)}
 button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline-color:var(--accent)}
