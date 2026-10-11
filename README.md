@@ -146,6 +146,8 @@ The [industrial reference pass](docs/industrial-reference-pass.md) aligns ceilin
 
 ## Spot Talk operator assistant
 
+The machine learning forecast workflow is documented in [ml/README.md](ml/README.md).
+
 Open **Spot Talk** using the Spot button at the bottom right. Ask about a mission (`M006`), waypoint (`WP09`), or asset (`HX-201`), or compare configurations. Choose a mission scope for focused questions. Explicit record identifiers override the scope selector; follow-up questions retain the last explicit scope. Changing scope or selecting New chat clears the conversation. Messages remain in browser memory only.
 
 Spot Talk uses the existing Node backend and Databricks credentials. No separate OpenAI key or Python backend is required. The default Databricks chat endpoint is `databricks-meta-llama-3-3-70b-instruct`; optionally set `DATABRICKS_CHAT_ENDPOINT` in `.env` to another compatible chat endpoint. The credential must have SQL SELECT permission on the six raw tables and CAN QUERY access to the model endpoint. Restart the server after changing environment variables. Never put tokens in React or commit `.env`.

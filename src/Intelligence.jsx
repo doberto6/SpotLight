@@ -1,3 +1,4 @@
+import PredictiveIntelligence from './PredictiveIntelligence.jsx';
 import RiskHeatmap from './RiskHeatmap.jsx';
 import SensorTrends from './SensorTrends.jsx';
 import React,{useEffect,useState} from 'react';
@@ -7,13 +8,16 @@ import {api} from './api.mjs';
 const percent=value=>value==null?'No inspections':`${Number(value).toFixed(1)}%`;
 const date=value=>String(value||'').replace('T',' ').replace('.000Z','');
 const risk=value=>value==null?'unknown':Number(value)>=30?'high':Number(value)>=15?'medium':'low';
-export default function Intelligence({onMission}){
+export default function Intelligence({onMission,onMap}){
+ const [mode,setMode]=useState('historical');
  const [requestedAsset,setRequestedAsset]=useState('');
  const [data,setData]=useState(null),[error,setError]=useState(''),[loading,setLoading]=useState(true),[selection,setSelection]=useState(null),[evidence,setEvidence]=useState(null),[evidenceError,setEvidenceError]=useState(''),[reload,setReload]=useState(0);
  useEffect(()=>{let active=true;setLoading(true);setError('');setData(null);api('/api/databricks/overview').then(j=>{if(active)setData(j)}).catch(e=>{if(active)setError(e.message)}).finally(()=>{if(active)setLoading(false)});return()=>{active=false};},[reload]);
  useEffect(()=>{let active=true;setEvidence(null);setEvidenceError('');if(selection)api(`/api/databricks/evidence?kind=${selection.kind}&id=${encodeURIComponent(selection.id)}`).then(j=>{if(active)setEvidence(j)}).catch(e=>{if(active)setEvidenceError(e.message)});return()=>{active=false};},[selection]);
  const investigate=(kind,id,title)=>setSelection({kind,id,title});
- return <div className="intelligence-workspace"><div className="panel-head"><p className="muted">Historical inspection insights · calculated in Databricks SQL</p><button disabled={loading} onClick={()=>setReload(v=>v+1)}>Refresh insights</button></div>
+ const switcher=<div className="insight-mode-toggle" role="group" aria-label="Intelligence view"><button aria-pressed={mode==='historical'} onClick={()=>setMode('historical')}>Historical insights</button><button aria-pressed={mode==='predictive'} onClick={()=>setMode('predictive')}>Predictive Intelligence</button></div>;
+ if(mode==='predictive')return <div className="intelligence-workspace">{switcher}<PredictiveIntelligence onMap={onMap} onMission={onMission}/></div>;
+ return <div className="intelligence-workspace">{switcher}<div className="panel-head"><p className="muted">Historical inspection insights · calculated in Databricks SQL</p><button disabled={loading} onClick={()=>setReload(v=>v+1)}>Refresh insights</button></div>
  {loading&&<section className="panel" role="status">Loading mission intelligence from Databricks…</section>}
  {error&&<section className="panel" role="alert"><h2>Intelligence unavailable</h2><p className="red">{error}</p><p className="muted">Check System Health and verify the intelligence SQL views have been created.</p></section>}
  {data&&<><div className="insight-metrics">{[[data.missions.length,'Missions'],[data.missions.filter(m=>m.review_required).length,'Require review'],[data.missions.filter(m=>m.hidden_failure).length,'Completed with failures'],[data.anomalies.filter(a=>a.severity==='CRITICAL').length,'Critical findings']].map(([value,label])=><div className="panel" key={label}><small>{label}</small><strong>{value}</strong></div>)}</div>

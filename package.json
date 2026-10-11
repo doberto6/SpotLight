@@ -8,7 +8,10 @@
     "build": "vite build",
     "test": "node --test",
     "databricks:setup": "node databricks/setup.mjs",
-    "start": "node server.mjs --production"
+    "start": "node server.mjs --production",
+    "ml:train": "node scripts/ml-run.mjs",
+    "ml:inspect": "node scripts/ml-inspect.mjs",
+    "ml:test": "node scripts/ml-validate.mjs"
   },
   "dependencies": {
     "@databricks/sql": "^2.2.0",
