@@ -1,8 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import {execFileSync} from 'node:child_process';
 import {createAPIHandler} from '../http-api.mjs';
 import {sameOrigin} from '../spot-talk.mjs';
+
+test('API imports without relying on synchronous require of ES modules',()=>{
+ execFileSync(process.execPath,['--no-experimental-require-module','--input-type=module','-e',"await import('./http-api.mjs')"],{cwd:new URL('../',import.meta.url),stdio:'pipe'});
+});
 
 test('Spot Talk accepts trusted proxy origins and rejects unrelated origins',()=>{
  const request={headers:{host:'127.0.0.1:4000',origin:'https://spotlight.example','x-vercel-deployment-url':'spotlight.example'}};
