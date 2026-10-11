@@ -14,13 +14,14 @@ import {createReplayEnvironment} from './replay-environment.js';
 import {SIMULATION_WALK_SPEED,sampleReplay,stepManual,angleDelta,worldPoint,stamp,recoveryRoute,pointOnPath,nextVisit,sourceTime} from './replay-engine.mjs';
 
 import {createMissionMarkers} from './mission-markers.js';
+import {createInspectionMarkers} from './inspection-markers.js';
 import {waypointFloor,floorAt} from './facility-layout.mjs';
 
 RectAreaLightUniformsLib.init();
 
-export default function SpotReplayScene({replay,route=replay,locations,anomalies,state,cameraMode,stopToken,selectedAnomaly,onAnomaly,onTelemetry,floor='all',selectedLocation,onSelect,onRecovery,overview=false,showLabels=true,showPath=true,showHitbox=true,roofMode='cutaway',cameraResetToken=0}) {
-  const hostRef=useRef(null),latest=useRef({}),[error,setError]=useState(''),[assetStatus,setAssetStatus]=useState({loaded:0,total:17,failed:[]});
-  latest.current={replay,state,cameraMode,stopToken,selectedAnomaly,onAnomaly,onTelemetry,floor,selectedLocation,onSelect,onRecovery,showLabels,showPath,showHitbox,roofMode,cameraResetToken};
+export default function SpotReplayScene({inspectionTargets,inspectionRecords,selectedInspection,onInspection,showInspectionTargets=false,missionId,replay,route=replay,locations,anomalies,state,cameraMode,stopToken,selectedAnomaly,onAnomaly,onTelemetry,floor='all',selectedLocation,onSelect,onRecovery,overview=false,showLabels=true,showPath=true,showHitbox=true,roofMode='cutaway',cameraResetToken=0}) {
+  const hostRef=useRef(null),latest=useRef({}),[error,setError]=useState(''),[assetStatus,setAssetStatus]=useState({loaded:0,total:19,failed:[]});
+  latest.current={inspectionRecords,selectedInspection,onInspection,showInspectionTargets,missionId,replay,state,cameraMode,stopToken,selectedAnomaly,onAnomaly,onTelemetry,floor,selectedLocation,onSelect,onRecovery,showLabels,showPath,showHitbox,roofMode,cameraResetToken};
   useEffect(()=>{
     const host=hostRef.current;let renderer;
     try{renderer=new THREE.WebGLRenderer({antialias:true});}catch{setError('3D graphics unavailable. Enable hardware acceleration to use the simulator.');return;}
@@ -38,6 +39,7 @@ export default function SpotReplayScene({replay,route=replay,locations,anomalies
     const robot=calibrateSpot(createSpot(resources)),hitbox=createSpotHitbox(robot,resources);robot.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});scene.add(robot);
     const initial=sampleReplay(replay,latest.current.state.time);robot.position.set(initial.x,0,initial.z);robot.rotation.y=initial.yaw;controls.target.set(initial.x,.7,initial.z);camera.position.set(initial.x-6,3.5,initial.z);controls.update();
     const missionMarkers=createMissionMarkers(scene,resources,locations,route);
+    const inspectionMarkers=createInspectionMarkers(scene,resources,inspectionTargets||[]);
     const headingRoutes=new WeakMap();const usesHeadings=replay=>{if(!headingRoutes.has(replay))headingRoutes.set(replay,replay.segments.some(seg=>seg.path[0]?.yaw!==undefined));return headingRoutes.get(replay);};
     const flags=anomalies.map(a=>{
       const p=worldPoint(a.location_id),geo=new THREE.ConeGeometry(.25,.6,4),mat=new THREE.MeshBasicMaterial({color:a.severity==='CRITICAL'?'#ff718b':'#ffc65e'});resources.push(geo,mat);
@@ -50,8 +52,24 @@ export default function SpotReplayScene({replay,route=replay,locations,anomalies
     window.addEventListener('keydown',keydown);window.addEventListener('keyup',keyup);window.addEventListener('blur',clear);host.addEventListener('blur',clear);
     const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2();let down;
     const pointerDown=e=>{host.focus({preventScroll:true});down=[e.clientX,e.clientY]};
-    const click=e=>{if(!down||Math.hypot(e.clientX-down[0],e.clientY-down[1])>5)return;const r=host.getBoundingClientRect();pointer.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);raycaster.setFromCamera(pointer,camera);const hit=raycaster.intersectObjects(flags.filter(f=>f.visible))[0];if(hit)latest.current.onAnomaly(hit.object.userData.anomaly);else {const marker=raycaster.intersectObjects(missionMarkers.pickables.filter(o=>o.visible))[0];if(marker)latest.current.onSelect?.(marker.object.userData.location);}};
+    const click=e=>{
+      if(!down||Math.hypot(e.clientX-down[0],e.clientY-down[1])>5)return;
+      const r=host.getBoundingClientRect();pointer.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);raycaster.setFromCamera(pointer,camera);
+      // WP labels are drawn above other overlays, so their clicks take priority.
+      const label=raycaster.intersectObjects(missionMarkers.labels.filter(o=>o.visible))[0];
+      if(label){latest.current.onSelect?.(label.object.userData.location);return;}
+      const hit=raycaster.intersectObjects(flags.filter(f=>f.visible))[0];if(hit){latest.current.onAnomaly(hit.object.userData.anomaly);return;}
+      const inspection=raycaster.intersectObjects(inspectionMarkers.pickables.filter(o=>o.visible))[0];if(inspection){latest.current.onInspection?.(inspection.object.userData.target);return;}
+      const marker=raycaster.intersectObjects(missionMarkers.pickables.filter(o=>o.visible))[0];if(marker)latest.current.onSelect?.(marker.object.userData.location);
+    };
+    const hover=e=>{
+      if(e.buttons){renderer.domElement.style.cursor='';return;}
+      const r=host.getBoundingClientRect();pointer.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);raycaster.setFromCamera(pointer,camera);
+      const pickables=[...missionMarkers.pickables,...inspectionMarkers.pickables,...flags].filter(o=>o.visible);
+      renderer.domElement.style.cursor=raycaster.intersectObjects(pickables).length?'pointer':'';
+    };
     renderer.domElement.addEventListener('pointerdown',pointerDown);renderer.domElement.addEventListener('click',click);
+    renderer.domElement.addEventListener('pointermove',hover);
     const resize=()=>{if(!host.clientWidth||!host.clientHeight)return;camera.aspect=host.clientWidth/host.clientHeight;camera.updateProjectionMatrix();renderer.setSize(host.clientWidth,host.clientHeight,false);composer.setSize(host.clientWidth,host.clientHeight);ao.setSize(Math.max(1,Math.floor(host.clientWidth*.65)),Math.max(1,Math.floor(host.clientHeight*.65)));};const observer=new ResizeObserver(resize);observer.observe(host);resize();
     let manualPose={...initial,speed:0},wasManual=false,lastMode='',lastYaw=initial.yaw,lastStop=-1,last=performance.now(),telemetryAt=0,frameId,topHeight=28,slowFrames=0,lastRobotX=initial.x,lastRobotZ=initial.z,recovery=null,recoveryDistance=0,heldPose=null,lastFloor='';
     host.__resetSpotStats=()=>{frames=0;statsStart=performance.now();renderMs=0;};
@@ -94,12 +112,15 @@ export default function SpotReplayScene({replay,route=replay,locations,anomalies
       if(transitionActive){const f=Math.min(1,(now-transitionStart)/450),destination=mode==='free'?transitionTo:mode==='chase'?desired:mode==='top'?new THREE.Vector3(target.x,topHeight,target.z+.01):camera.position.clone();camera.position.lerpVectors(transitionFrom,destination,f*f*(3-2*f));if(f===1)transitionActive=false;camera.lookAt(mode==='first'?target.clone().addScaledVector(direction,8):controls.target);}if(mode==='free'&&!overview){offset.copy(camera.position).sub(controls.target);cameraRay.set(controls.target,offset.clone().normalize());cameraRay.far=offset.length();const hit=cameraRay.intersectObjects(solids.filter(o=>o.userData.floor===floorAt(controls.target.x,controls.target.z)))[0];if(hit&&hit.distance>.6){camera.position.copy(controls.target).addScaledVector(offset.normalize(),Math.max(.5,hit.distance-.25));camera.lookAt(controls.target);}}if(mode!=='top')camera.up.set(0,1,0);lastYaw=robot.rotation.y;hitbox.visible=live.showHitbox;robot.visible=replay.visits.length>0&&mode!=='first'&&!pose.transfer&&(live.floor==='all'||live.floor===(pose.floor||floorAt(pose.x,pose.z)));
       missionMarkers.update({time:s.time,floor:live.floor,playing:s.playing,manual:s.manual,recovering:s.recovering,selected:live.selectedLocation,anomalies,destination:pose.destination||nextVisit(replay,s.time)?.location_id,camera,now,showLabels:live.showLabels,sourceTime:sourceTime(replay,s.time),showPath:live.showPath,timeline:replay});
       for(const flag of flags){const a=flag.userData.anomaly;flag.visible=(live.floor==='all'||live.floor===waypointFloor(a.location_id))&&(stamp(a.timestamp)<=replay.start+sourceTime(replay,s.time)*1000||a.anomaly_id===live.selectedAnomaly?.anomaly_id);flag.scale.setScalar(a.anomaly_id===live.selectedAnomaly?.anomaly_id?1.6:1);}
+      if(live.inspectionRecords)inspectionMarkers.update({now,floor:live.floor,showTargets:live.showInspectionTargets,selected:live.selectedInspection,records:live.inspectionRecords,sourceTimestamp:replay.start+sourceTime(replay,s.time)*1000,camera});
+      environment.fitout.animate(dt);
+      environment.fitout.drawStatus({missionId:live.missionId,pose,progress:s.time/replay.duration,manual:s.manual,findings:anomalies.filter(a=>stamp(a.timestamp)<=replay.start+sourceTime(replay,s.time)*1000).length});
       if(now-telemetryAt>100){live.onTelemetry({...pose,floor:pose.floor||floorAt(pose.x,pose.z),walking:moving,recovering:!!recoveredPose,held:!!heldPose});telemetryAt=now;}
       const renderStart=performance.now();renderer.info.autoReset=false;renderer.info.reset();composer.render();renderMs+=performance.now()-renderStart;frames++;
-      if(now-diagnosticAt>500){host.__spotDiagnostics={route:missionMarkers.path.snapshot(),roof:live.roofMode,ao:ao.enabled,collision:{visible:hitbox.visible,dimensions:SPOT_COLLISION,id:hitbox.uuid,position:robot.position.toArray(),yaw:robot.rotation.y,blocked:blockedPose({x:pose.x,z:pose.z,yaw:robot.rotation.y})},camera:{near:camera.near,far:camera.far,position:camera.position.toArray(),target:controls.target.toArray(),mode},render:{backend,fps:frames*1000/Math.max(1,now-statsStart),cpuMs:renderMs/frames,calls:renderer.info.render.calls,triangles:renderer.info.render.triangles},pose:{x:pose.x,z:pose.z,yaw:robot.rotation.y},timeline:{time:s.time,duration:replay.duration,mode:s.mode,source:sourceTime(replay,s.time)},recoveryPlans:host.__recoveryPlans||0};diagnosticAt=now;}
+      if(now-diagnosticAt>500){host.__spotDiagnostics={route:missionMarkers.path.snapshot(),fitout:environment.fitout.summary,waypoints:missionMarkers.labels.map(o=>{const screen=o.position.clone().project(camera);return {id:o.userData.location.location_id,floor:o.userData.location.floor,visible:o.visible,screen:[(screen.x+1)/2*host.clientWidth,(1-screen.y)/2*host.clientHeight]};}),inspection:inspectionMarkers.snapshot().map(t=>{const screen=new THREE.Vector3(...t.position).project(camera);return {...t,screen:[(screen.x+1)/2*host.clientWidth,(1-screen.y)/2*host.clientHeight]};}),roof:live.roofMode,ao:ao.enabled,collision:{visible:hitbox.visible,dimensions:SPOT_COLLISION,id:hitbox.uuid,position:robot.position.toArray(),yaw:robot.rotation.y,blocked:blockedPose({x:pose.x,z:pose.z,yaw:robot.rotation.y})},camera:{near:camera.near,far:camera.far,position:camera.position.toArray(),target:controls.target.toArray(),mode},render:{backend,fps:frames*1000/Math.max(1,now-statsStart),cpuMs:renderMs/frames,calls:renderer.info.render.calls,triangles:renderer.info.render.triangles},pose:{x:pose.x,z:pose.z,yaw:robot.rotation.y},timeline:{time:s.time,duration:replay.duration,mode:s.mode,source:sourceTime(replay,s.time)},recoveryPlans:host.__recoveryPlans||0};diagnosticAt=now;}
       frameId=requestAnimationFrame(frame);
     };frame();
-    return()=>{cancelAnimationFrame(frameId);environment.dispose();observer.disconnect();window.removeEventListener('keydown',keydown);window.removeEventListener('keyup',keyup);window.removeEventListener('blur',clear);host.removeEventListener('blur',clear);renderer.domElement.removeEventListener('pointerdown',pointerDown);renderer.domElement.removeEventListener('click',click);renderer.domElement.removeEventListener('wheel',wheel);controls.dispose();ao.dispose();ao.gtaoMaterial.dispose();ao.blendMaterial.dispose();output.dispose();composer.dispose();sun.shadow.dispose();for(const r of new Set(resources))r.dispose();renderer.dispose();renderer.domElement.remove();delete host.__resetSpotStats;delete host.__spotDiagnostics;delete host.__recoveryPlans;};
-  },[route,locations,anomalies,overview]);
+    return()=>{cancelAnimationFrame(frameId);environment.dispose();observer.disconnect();window.removeEventListener('keydown',keydown);window.removeEventListener('keyup',keyup);window.removeEventListener('blur',clear);host.removeEventListener('blur',clear);renderer.domElement.removeEventListener('pointerdown',pointerDown);renderer.domElement.removeEventListener('click',click);renderer.domElement.removeEventListener('pointermove',hover);renderer.domElement.removeEventListener('wheel',wheel);controls.dispose();ao.dispose();ao.gtaoMaterial.dispose();ao.blendMaterial.dispose();output.dispose();composer.dispose();sun.shadow.dispose();for(const r of new Set(resources))r.dispose();renderer.dispose();renderer.domElement.remove();delete host.__resetSpotStats;delete host.__spotDiagnostics;delete host.__recoveryPlans;};
+  },[route,locations,anomalies,overview,inspectionTargets]);
   return <div ref={hostRef} className="spot-replay-canvas" tabIndex={0} role="region" aria-label="Spot simulation viewport. In manual mode focus here and use WASD or arrow keys; Space stops.">{error&&<p className="spot-replay-error" role="alert">{error}</p>}{assetStatus.loaded<assetStatus.total&&<span className="industrial-loading" role="status">Loading plant details · {assetStatus.loaded}/{assetStatus.total}</span>}{assetStatus.loaded===assetStatus.total&&assetStatus.failed.length>0&&<span className="industrial-loading" role="status">Some model details unavailable · procedural equipment active</span>}</div>;
 }

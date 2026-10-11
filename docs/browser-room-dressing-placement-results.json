@@ -1,0 +1,144 @@
+{
+  "missionPathsUnchanged": true,
+  "missions": [
+    {
+      "mission": "M001",
+      "pathsUnchanged": true,
+      "pathHash": "64878d93ad57cc3a9e537a52387a3fda85eb7ac811a57fb6d29d4d0265e489b9"
+    },
+    {
+      "mission": "M002",
+      "pathsUnchanged": true,
+      "pathHash": "9aac32277b655487eae17bb2f144c2924dec8474c56801f253b0517291e684a2"
+    },
+    {
+      "mission": "M003",
+      "pathsUnchanged": true,
+      "pathHash": "98302135bcc2567c2f895afd972caaa1e7813c773cd7128182ec153bf3b33404"
+    },
+    {
+      "mission": "M004",
+      "pathsUnchanged": true,
+      "pathHash": "6059118d864f2e1a4de82eb3f2b9b9c506b385a91a45371a22fd367c73b02d3b"
+    },
+    {
+      "mission": "M005",
+      "pathsUnchanged": true,
+      "pathHash": "c160a64e23965483f355abeef1c4e42c7a0ee7e5c4d82234e078354ff093d3b2"
+    },
+    {
+      "mission": "M006",
+      "pathsUnchanged": true,
+      "pathHash": "7d6ce5d85e98bd88aa4bce5b52ed8e7b30984c69b9de7efa0504aaccf1330ef9"
+    },
+    {
+      "mission": "M007",
+      "pathsUnchanged": true,
+      "pathHash": "3c434a4281d93f695277a219cb8de2c43ffd7f065e599020886c24d0d4cb3a90"
+    },
+    {
+      "mission": "M008",
+      "pathsUnchanged": true,
+      "pathHash": "4acdf4dc8dbd8440bcc8aa3a4a0f4ed68d85242cd74591788ed2c04712823d28"
+    },
+    {
+      "mission": "M009",
+      "pathsUnchanged": true,
+      "pathHash": "e35f08ac0b540afe0dce15b6def3c7f504d9f22ada432024f0905acc70670ce6"
+    },
+    {
+      "mission": "M010",
+      "pathsUnchanged": true,
+      "pathHash": "a3a3e0f75518e87d7655b0a1578c5ad2373474f3bdf53aa82452a5a7574a20a1"
+    },
+    {
+      "mission": "M011",
+      "pathsUnchanged": true,
+      "pathHash": "a8602a148343e74d2506ebb04b20d093b966d534a0ce1c0bfdbe329704f7d618"
+    },
+    {
+      "mission": "M012",
+      "pathsUnchanged": true,
+      "pathHash": "0ff7be701e2d136db78f1f1b7b94e98e21c02ca3ad50918abf66633e098d7c0c"
+    },
+    {
+      "mission": "M013",
+      "pathsUnchanged": true,
+      "pathHash": "de6b47821de57db92692bb925d02395efaabd3508f70bf66e75e7eac31498db8"
+    },
+    {
+      "mission": "M014",
+      "pathsUnchanged": true,
+      "pathHash": "ab432f6971e3e654e7d6edbb9aef8a069c2b94c3d0724815e1d7f2d4391ae137"
+    },
+    {
+      "mission": "M015",
+      "pathsUnchanged": true,
+      "pathHash": "cde6ace91c22016151f329c78ce1171e2f6afe817c0a8b5c780f353e70034c34"
+    },
+    {
+      "mission": "M016",
+      "pathsUnchanged": true,
+      "pathHash": "01b327d63ce05592f445bd2386a1ca15d68c5508891fb4a49b19f9179fadb939"
+    },
+    {
+      "mission": "M017",
+      "pathsUnchanged": true,
+      "pathHash": "4c39e0a25245252cbf6addfbbcda143174565a017b439f392a4c3e1b6523dbae"
+    },
+    {
+      "mission": "M018",
+      "pathsUnchanged": true,
+      "pathHash": "c34e0a8b170b3fc983f03fe013cba1d9d1ab2b32a38cb83686c3d80b1cee191b"
+    },
+    {
+      "mission": "M019",
+      "pathsUnchanged": true,
+      "pathHash": "2403e6ac5cde82569d83025600aa94f09e2c17b234a2dfb3e9b54c4b4df27c2f"
+    },
+    {
+      "mission": "M020",
+      "pathsUnchanged": true,
+      "pathHash": "a53f4d2c04601dc1084109c6c178abe53260ae0433587fa48647470da3e7ea56"
+    },
+    {
+      "mission": "M021",
+      "pathsUnchanged": true,
+      "pathHash": "97bbba671f964b132df1544c21932fe8a2c039f4a1f7afdc6b0e481f2a77eca0"
+    },
+    {
+      "mission": "M022",
+      "pathsUnchanged": true,
+      "pathHash": "df47213491a702ed8e05800ec475d380a2fa824323e0bc78f3622835b30f7488"
+    },
+    {
+      "mission": "M023",
+      "pathsUnchanged": true,
+      "pathHash": "322ad4570c71b40d05956cfeb3946bc86ff8b474d11a2e222368da9816bac983"
+    },
+    {
+      "mission": "M024",
+      "pathsUnchanged": true,
+      "pathHash": "1a30e0b80d386685b58bddddb8727ccb01e5afa2ee1ebe2b7c09cc0917af15a2"
+    },
+    {
+      "mission": "M025",
+      "pathsUnchanged": true,
+      "pathHash": "892999c7e341176b2111e69af815783810675426b14294cbb3df011c2960d86d"
+    },
+    {
+      "mission": "M026",
+      "pathsUnchanged": true,
+      "pathHash": "fd26adab0c47f4e9cdf8383d5d792bd485835272d20d1f65f0ad401a6b662b3c"
+    },
+    {
+      "mission": "M027",
+      "pathsUnchanged": true,
+      "pathHash": "1a33ca274aec610a2290ba70b30bb3ed78529f346f1d8f22a6be63b19e6bf9db"
+    }
+  ],
+  "roomServiceBoards": 30,
+  "furnitureColliders": 17,
+  "allSameFloorWaypointPairsReachable": true,
+  "source": "/tmp/spot-route-before-dressing.json (captured before adding furniture)"
+}

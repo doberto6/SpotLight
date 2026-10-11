@@ -1,0 +1,42 @@
+[
+  {
+    "name": "maintenance_workbench",
+    "bytes": 183296,
+    "triangles": 2920,
+    "meshes": 4,
+    "bounds": {
+      "min": [
+        -0.6700000166893005,
+        -0.33000001311302185,
+        0.0
+      ],
+      "max": [
+        0.6700000166893005,
+        0.35199999809265137,
+        1.6150000095367432
+      ]
+    },
+    "license": "CC0-1.0",
+    "author": "SPOTlight original geometry"
+  },
+  {
+    "name": "bridge_hoist",
+    "bytes": 76900,
+    "triangles": 1232,
+    "meshes": 3,
+    "bounds": {
+      "min": [
+        -0.3659999966621399,
+        -0.3149999976158142,
+        0.0002528764307498932
+      ],
+      "max": [
+        0.38999998569488525,
+        0.3149999976158142,
+        1.2160000801086426
+      ]
+    },
+    "license": "CC0-1.0",
+    "author": "SPOTlight original geometry"
+  }
+]

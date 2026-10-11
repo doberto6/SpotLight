@@ -1,0 +1,172 @@
+{
+  "rooms": [
+    {
+      "waypoint": "WP01",
+      "floor": "1",
+      "mission": "M001",
+      "pose": {
+        "x": -32,
+        "z": 11.700000000000001,
+        "yaw": 0
+      },
+      "hitboxClear": true
+    },
+    {
+      "waypoint": "WP02",
+      "floor": "1",
+      "mission": "M008",
+      "pose": {
+        "x": -31.760000000000005,
+        "z": 0.675,
+        "yaw": 0
+      },
+      "hitboxClear": true
+    },
+    {
+      "waypoint": "WP03",
+      "floor": "1",
+      "mission": "M001",
+      "pose": {
+        "x": -21.44,
+        "z": -5.4,
+        "yaw": 0
+      },
+      "hitboxClear": true
+    },
+    {
+      "waypoint": "WP04",
+      "floor": "1",
+      "mission": "M003",
+      "pose": {
+        "x": -24.32,
+        "z": -16.425,
+        "yaw": 0
+      },
+      "hitboxClear": true
+    },
+    {
+      "waypoint": "WP05",
+      "floor": "1",
+      "mission": "M001",
+      "pose": {
+        "x": -7.360000000000003,
+        "z": -6.3,
+        "yaw": 0
+      },
+      "hitboxClear": true
+    },
+    {
+      "waypoint": "WP06",
+      "floor": "1",
+      "mission": "M002",
+      "pose": {
+        "x": 0.48000000000000115,
+        "z": -16.425,
+        "yaw": 0
+      },
+      "hitboxClear": true
+    },
+    {
+      "waypoint": "WP07",
+      "floor": "1",
+      "mission": "M001",
+      "pose": {
+        "x": 8.480000000000002,
+        "z": -1.8,
+        "yaw": 0
+      },
+      "hitboxClear": true
+    },
+    {
+      "waypoint": "WP08",
+      "floor": "1",
+      "mission": "M004",
+      "pose": {
+        "x": -12.32,
+        "z": 7.875,
+        "yaw": 0
+      },
+      "hitboxClear": true
+    },
+    {
+      "waypoint": "WP09",
+      "floor": "1",
+      "mission": "M001",
+      "pose": {
+        "x": 0.23999999999999774,
+        "z": 7.875,
+        "yaw": 0
+      },
+      "hitboxClear": true
+    },
+    {
+      "waypoint": "WP10",
+      "floor": "1",
+      "mission": "M001",
+      "pose": {
+        "x": 9.12,
+        "z": 9,
+        "yaw": 0
+      },
+      "hitboxClear": true
+    },
+    {
+      "waypoint": "WP11",
+      "floor": "2",
+      "mission": "M002",
+      "pose": {
+        "x": 22,
+        "z": -12.825000000000001,
+        "yaw": 0
+      },
+      "hitboxClear": true
+    },
+    {
+      "waypoint": "WP12",
+      "floor": "2",
+      "mission": "M001",
+      "pose": {
+        "x": 33.2,
+        "z": -12.15,
+        "yaw": 0
+      },
+      "hitboxClear": true
+    },
+    {
+      "waypoint": "WP13",
+      "floor": "2",
+      "mission": "M002",
+      "pose": {
+        "x": 21.120000000000005,
+        "z": 1.35,
+        "yaw": 0
+      },
+      "hitboxClear": true
+    },
+    {
+      "waypoint": "WP14",
+      "floor": "2",
+      "mission": "M002",
+      "pose": {
+        "x": 32.48,
+        "z": 3.6,
+        "yaw": 0
+      },
+      "hitboxClear": true
+    },
+    {
+      "waypoint": "WP15",
+      "floor": "2",
+      "mission": "M001",
+      "pose": {
+        "x": 25.439999999999998,
+        "z": 13.05,
+        "yaw": 0
+      },
+      "hitboxClear": true
+    }
+  ],
+  "simulationHitboxToggle": true,
+  "simulationMobileOverflow": false,
+  "errors": []
+}

@@ -1,0 +1,15 @@
+{
+  "wpLabelMouseClick": true,
+  "hoverPointer": true,
+  "clickPreservesTimePoseHitboxAndRoute": true,
+  "manualClickPreservesBranch": true,
+  "fullscreenCard": true,
+  "upcomingEvidenceSeparate": true,
+  "criticalRecordedFinding": true,
+  "rewindHidesEncounteredEvidence": true,
+  "floorFiltering": true,
+  "sidebarSelection": true,
+  "mobileCardFitsViewport": true,
+  "closeAndEscape": true,
+  "errors": []
+}

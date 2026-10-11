@@ -1,4 +1,5 @@
 // Registered to fictional_floor_plan.png (% of the full image). Estimated dimensions.
+import {roomFurniture} from './room-furniture.mjs';
 export const waypointPositions={WP01:[10,76],WP02:[10.3,51.5],WP03:[23.2,38],WP04:[19.6,13.5],WP05:[40.8,36],WP06:[50.6,13.5],WP07:[60.6,46],WP08:[34.6,67.5],WP09:[50.3,67.5],WP10:[61.4,70],WP11:[77.5,21.5],WP12:[91.5,23],WP13:[76.4,53],WP14:[90.6,58],WP15:[81.8,79]};
 export const imageToWorld=([x,y])=>({x:(x-50)*.8,z:(y-50)*.45});
 export const worldToImage=({x,z})=>[x/.8+50,z/.45+50];
@@ -50,4 +51,4 @@ for(const [waypoint,x,z,w,d,h,asset,role] of [
  ['WP12',35.9,-7.5,2.4,2.4,1.7,'pump_skid','exchanger circulation pump'],
  ['WP13',25.2,3.6,1.2,5.4,2.2,'warehouse','spare-parts rack']
 ])equipment.push({waypoint,x,z,w,d,h,asset,role,type:'equipment',floor:waypointFloor(waypoint)});
-export const obstacles=[...walls,...equipment];
+export const obstacles=[...walls,...equipment,...roomFurniture];

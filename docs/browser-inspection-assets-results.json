@@ -1,0 +1,22 @@
+{
+  "worldTargetClick": true,
+  "sourceReadings": true,
+  "futureEvidenceHidden": true,
+  "stableRoute": true,
+  "mobileOverflow": false,
+  "fitout": {
+    "rooms": 15,
+    "doorFrames": 18,
+    "cranes": 2,
+    "workbenches": 1,
+    "coolingFans": 4,
+    "dressing": {
+      "rooms": 15,
+      "serviceBoards": 30,
+      "furniture": 17,
+      "twoToneWalls": true
+    }
+  },
+  "targets": 20,
+  "errors": []
+}

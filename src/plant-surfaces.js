@@ -43,3 +43,20 @@ export function concreteMaps(resources,repeat=[20,12],{joints=true,base=165,norm
   });
   return {map,roughnessMap,normalMap,normalScale:new THREE.Vector2(normalStrength,normalStrength)};
 }
+
+// Shared world-scale painted plaster/steel finish. Gentle roller grain and
+// narrow scuffs keep the plant maintained; roughness is independent of color.
+export function paintedWallMaps(resources){
+ const size=512,values=new Float32Array(size*size);let seed=9221;
+ for(let i=0;i<values.length;i++){seed=(Math.imul(seed,1664525)+1013904223)>>>0;values[i]=(seed%997)/997;}
+ const make=(kind)=>{
+  const canvas=document.createElement('canvas');canvas.width=canvas.height=size;const c=canvas.getContext('2d'),pixels=c.createImageData(size,size);
+  for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+   const i=y*size+x,n=values[i],cloud=Math.sin(x*.031+Math.sin(y*.024))*Math.cos(y*.018),scratch=x%137===0&&y%213<30;
+   const rgb=kind==='color'?[242+cloud*5+n*5-(scratch?9:0),243+cloud*5+n*5-(scratch?9:0),240+cloud*5+n*5-(scratch?9:0)]:kind==='roughness'?[192+n*29,192+n*29,192+n*29]:[128+(values[y*size+(x+1)%size]-n)*8,128+(values[((y+1)%size)*size+x]-n)*8,254];
+   pixels.data.set([...rgb,255],i*4);
+  }
+  c.putImageData(pixels,0,0);const texture=new THREE.CanvasTexture(canvas);texture.wrapS=texture.wrapT=THREE.RepeatWrapping;texture.repeat.set(1/2.4,1/2.4);texture.anisotropy=4;if(kind==='color')texture.colorSpace=THREE.SRGBColorSpace;resources.push(texture);return texture;
+ };
+ return {map:make('color'),roughnessMap:make('roughness'),normalMap:make('normal'),normalScale:new THREE.Vector2(.14,.14)};
+}

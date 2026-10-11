@@ -1,0 +1,51 @@
+{
+  "rooms": [
+    {
+      "waypoint": "WP01",
+      "floor": "1",
+      "mission": "M001",
+      "pose": {
+        "x": -32,
+        "z": 11.700000000000001,
+        "yaw": 0
+      },
+      "hitboxClear": true
+    },
+    {
+      "waypoint": "WP07",
+      "floor": "1",
+      "mission": "M001",
+      "pose": {
+        "x": 8.480000000000002,
+        "z": -1.8,
+        "yaw": 0
+      },
+      "hitboxClear": true
+    },
+    {
+      "waypoint": "WP13",
+      "floor": "2",
+      "mission": "M002",
+      "pose": {
+        "x": 21.120000000000005,
+        "z": 1.35,
+        "yaw": 0
+      },
+      "hitboxClear": true
+    },
+    {
+      "waypoint": "WP15",
+      "floor": "2",
+      "mission": "M001",
+      "pose": {
+        "x": 25.439999999999998,
+        "z": 13.05,
+        "yaw": 0
+      },
+      "hitboxClear": true
+    }
+  ],
+  "simulationHitboxToggle": true,
+  "simulationMobileOverflow": false,
+  "errors": []
+}

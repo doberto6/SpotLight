@@ -8,13 +8,17 @@ import {planRoof,clerestoryOpenings,deckRibs} from './facility-roof.mjs';
 import {steelSection} from './steel-section.js';
 import {servicePlacements,servicePorts,headerTap} from './service-connections.mjs';
 import {wallPanels} from './industrial-details.mjs';
+import {buildPlantFitout} from './plant-fitout.js';
+import {wallFinishMaterials,buildWallFinish} from './wall-finishes.js';
+import {buildRoomDressing} from './room-dressing.js';
+export const fitoutAssetNames=['maintenance_workbench','bridge_hoist'];
 export const industrialAssetNames=['factory_modular_kit','industrial_electrical_box','industrial_pipes_pack','large_modular_pipes_metal'];
 
 export function createReplayEnvironment(scene,resources,locations,onAssets=()=>{}){
-  let disposed=false,currentFloor='1';const groups={1:new THREE.Group(),2:new THREE.Group()},solids=[],batches=new Map(),fallbacks=new Map(),rackFallbacks=[],detailPlacements={pipe_rack:[],maintenance_cart:[]},upperWalls=[],wallMounts={},decks=[],roofGroups={},structuralPlacements={roof_truss:[],industrial_luminaire:[],pipe_hanger:[]},roofPlan=planRoof();Object.entries(groups).forEach(([id,g])=>{g.name='Floor '+id;scene.add(g);roofGroups[id]=new THREE.Group();g.add(roofGroups[id]);});
+  let disposed=false,currentFloor='1';const groups={1:new THREE.Group(),2:new THREE.Group()},solids=[],batches=new Map(),fallbacks=new Map(),rackFallbacks=[],fitoutPlacements={maintenance_workbench:[],bridge_hoist:[]},detailPlacements={pipe_rack:[],maintenance_cart:[]},upperWalls=[],wallMounts={},decks=[],roofGroups={},structuralPlacements={roof_truss:[],industrial_luminaire:[],pipe_hanger:[]},roofPlan=planRoof();Object.entries(groups).forEach(([id,g])=>{g.name='Floor '+id;scene.add(g);roofGroups[id]=new THREE.Group();g.add(roofGroups[id]);});
   const keep=r=>(resources.push(r),r),mat=(color,roughness=.65,metalness=.4,extra={})=>keep(new THREE.MeshStandardMaterial({color,roughness,metalness,...extra}));
   const m={steel:mat('#4f626b',.4,.8),silver:mat('#a1b1b7',.32,.85),blue:mat('#397e87',.48,.55),yellow:mat('#caaa47',.6,.35),dark:mat('#303a40'),wall:mat('#d5d5c8',.89,.02,concreteMaps(resources,[.55,.55],{joints:false,base:190,normalStrength:.15})),frame:mat('#8d9995',.58,.55),red:mat('#a54d3c'),light:mat('#eef5ec',.4,.1,{emissive:'#dbe9e4',emissiveIntensity:1.2}),floor:mat('#c9d5db',.89,.01,industrialFloorMaps(resources)),glass:mat('#b1cecc',.24,.1,{transparent:true,opacity:.3,depthWrite:false})};
-  m.joint=mat('#737873',.95,0);m.cargo=mat('#8b7754',.9,0);
+  m.joint=mat('#737873',.95,0);m.cargo=mat('#8b7754',.9,0);const wallPaint=wallFinishMaterials(resources);
   // Retain photographed wear while reducing the outdoor brown cast indoors.
   m.floor.onBeforeCompile=shader=>{shader.fragmentShader=shader.fragmentShader.replace('#include <map_fragment>','#include <map_fragment>\n diffuseColor.rgb=mix(vec3(dot(diffuseColor.rgb,vec3(.2126,.7152,.0722))),diffuseColor.rgb,.18);');};
   m.floor.customProgramCacheKey=()=> 'industrial-concrete-desaturated';
@@ -37,16 +41,12 @@ export function createReplayEnvironment(scene,resources,locations,onAssets=()=>{
   for(const f of floors){currentFloor=f.id;const outline=new THREE.Shape(f.outline.map(p=>{const q=imageToWorld(p);return new THREE.Vector2(q.x,-q.z);}));const geo=keep(new THREE.ExtrudeGeometry(outline,{depth:.2,bevelEnabled:false})),floor=add(new THREE.Mesh(geo,m.floor));floor.rotation.x=-Math.PI/2;floor.receiveShadow=true;floor.position.y=-.2;
     const wallRects=obstacles.filter(o=>o.type==='wall'&&o.floor===f.id),footprint=wallFootprint(wallRects),outside=wallRects.filter(o=>o.exterior),openings=clerestoryOpenings(f.id),outerFootprint=wallFootprint(outside),windowBand=wallFootprint(outside,openings);
     const buildWall=(plan,low,high,options,parent=groups[f.id])=>{const data=wallSurface(plan,low,high,options),g=keep(new THREE.BufferGeometry());g.setAttribute('position',new THREE.Float32BufferAttribute(data.positions,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(data.normals,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(data.uvs,2));g.setIndex(data.indices);const mesh=new THREE.Mesh(g,m.wall);parent.add(mesh);mesh.castShadow=mesh.receiveShadow=true;return mesh;};
-    buildWall(footprint,-.035,1.35,{bottom:true,top:true});
     // Flush expansion joints, clipped to the actual irregular floor outline.
     for(const rib of deckRibs(f,4))box([.012,.003,rib.length],[rib.x,.0015,rib.z],m.joint);
     const transposed={outline:f.outline.map(p=>{const q=imageToWorld(p);return [(q.z/.8)+50,(q.x/.45)+50];})};
     for(const rib of deckRibs(transposed,4))box([rib.length,.003,.012],[rib.z,.0015,rib.x],m.joint);
-    for(const e of footprint.edges){const length=e.b-e.a,center=(e.a+e.b)/2,line=e.line+e.normal*.0015;
-      for(const y of [.45,.9])box(e.axis==='x'?[.003,.007,length]:[length,.007,.003],e.axis==='x'?[line,y,center]:[center,y,line],m.joint);
-      for(let t=Math.ceil(e.a/3)*3;t<e.b;t+=3)box(e.axis==='x'?[.003,1.32,.009]:[.009,1.32,.003],e.axis==='x'?[line,.66,t]:[t,.66,line],m.joint);
-    }
     const upper=new THREE.Group();add(upper);upperWalls.push(upper);wallMounts[f.id]=upper;
+    buildWallFinish({floor:f.id,resources,groups,upper,box,shape,m,paint:wallPaint});
     buildWall(footprint,1.35,3.5,{bottom:false,top:true},upper);
     buildWall(outerFootprint,3.5,3.9,{bottom:false,top:true},upper);
     buildWall(windowBand,3.9,5.6,{bottom:false,top:false},upper);
@@ -63,6 +63,7 @@ export function createReplayEnvironment(scene,resources,locations,onAssets=()=>{
     if(o.type==='wall'){
       proxy.visible=false;proxy.scale.y=1.35;proxy.position.y=.675;continue;
     }
+    if(o.type==='fixture'){proxy.visible=false;continue;}
     proxy.visible=false;box([o.w,.22,o.d],[o.x,.11,o.z],m.wall);
     const fallback=new THREE.Group();add(fallback);fallbacks.set(o,fallback);
     if(o.asset==='pipes'){
@@ -160,13 +161,15 @@ export function createReplayEnvironment(scene,resources,locations,onAssets=()=>{
       box(horizontal?[.035,.025,.016]:[.016,.025,.035],[position[0],1.137,position[2]],m.dark);
     }
   }
+  const fitout=buildPlantFitout({resources,groups,upper:wallMounts,roofPlan,setFloor:f=>{currentFloor=f},box,shape,pipe,roundedPipe,m,fitoutPlacements});
+  fitout.summary.dressing=buildRoomDressing({resources,groups,upper:wallMounts,setFloor:f=>{currentFloor=f},box,shape,pipe,m});
   for(const b of batches.values()){const mesh=new THREE.InstancedMesh(geos[b.kind],b.material,b.matrices.length);b.matrices.forEach((v,i)=>mesh.setMatrixAt(i,v));mesh.receiveShadow=true;mesh.computeBoundingSphere();(b.parent||groups[b.floor]).add(mesh);keep(mesh);}
   function register(root){root.traverse(o=>{if(o.geometry)keep(o.geometry);for(const m of [].concat(o.material||[])){keep(m);for(const t of Object.values(m))if(t?.isTexture)keep(t);}});}
   function release(root){const items=[];root.traverse(o=>{if(o.geometry)items.push(o.geometry);for(const m of [].concat(o.material||[])){items.push(m);for(const t of Object.values(m))if(t?.isTexture)items.push(t);}});new Set(items).forEach(r=>r.dispose());}
   function fit(root,o,size=[o.w-.12,o.h-.22,o.d-.12],y=.22,attach=true){const group=new THREE.Group(),clone=root.clone(true);group.add(clone);group.updateMatrixWorld(true);const bound=new THREE.Box3().setFromObject(group),s=bound.getSize(new THREE.Vector3()),c=bound.getCenter(new THREE.Vector3()),scale=Math.min(...size.map((n,i)=>n/Math.max(.001,s.getComponent(i))));clone.position.sub(new THREE.Vector3(c.x,bound.min.y,c.z));group.scale.setScalar(scale);group.position.set(o.x,y,o.z);clone.traverse(m=>{if(m.isMesh){m.castShadow=true;m.receiveShadow=true;}});if(attach)groups[o.floor].add(group);return group;}
   const loader=new GLTFLoader(),failed=[];let count=0;const names=[...engineeredAssetNames,...industrialAssetNames];onAssets({loaded:0,total:names.length,failed:[]});
-  names.push(...Object.keys(structuralPlacements),...Object.keys(detailPlacements),'service_manifold');onAssets({loaded:0,total:names.length,failed:[]});
-  const jobs=names.map(async name=>{try{const path=detailPlacements[name]?'details':name==='service_manifold'?'services':structuralPlacements[name]?'structural':engineeredAssetNames.includes(name)?'engineered':'industrial',gltf=await loader.loadAsync('/models/'+path+'/'+name+'.glb');if(disposed){release(gltf.scene);return;}register(gltf.scene);
+  names.push(...Object.keys(structuralPlacements),...Object.keys(detailPlacements),...fitoutAssetNames,'service_manifold');onAssets({loaded:0,total:names.length,failed:[]});
+  const jobs=names.map(async name=>{try{const path=fitoutPlacements[name]?'fitout':detailPlacements[name]?'details':name==='service_manifold'?'services':structuralPlacements[name]?'structural':engineeredAssetNames.includes(name)?'engineered':'industrial',gltf=await loader.loadAsync('/models/'+path+'/'+name+'.glb');if(disposed){release(gltf.scene);return;}register(gltf.scene);
     if(path==='structural'){
       const instances=new Map();gltf.scene.updateMatrixWorld(true);
       for(const p of structuralPlacements[name]){p.parent.updateWorldMatrix(true,false);let ancestor=p.parent;while(ancestor.parent&&!Object.values(roofGroups).includes(ancestor))ancestor=ancestor.parent;const floor=Object.keys(roofGroups).find(id=>roofGroups[id]===ancestor),scale=new THREE.Matrix4().makeScale(...p.scale);gltf.scene.traverse(o=>{if(!o.isMesh)return;const key=floor+o.uuid;if(!instances.has(key))instances.set(key,{o,floor,matrices:[]});instances.get(key).matrices.push(p.parent.matrixWorld.clone().multiply(scale).multiply(o.matrixWorld));});if(p.parent.userData.fallback)p.parent.userData.fallback.visible=false;}
@@ -176,6 +179,12 @@ export function createReplayEnvironment(scene,resources,locations,onAssets=()=>{
       const instances=new Map();gltf.scene.updateMatrixWorld(true);for(const p of detailPlacements[name]){const transform=new THREE.Matrix4().compose(new THREE.Vector3(...p.position),new THREE.Quaternion(),new THREE.Vector3(...p.scale));gltf.scene.traverse(o=>{if(!o.isMesh)return;const key=p.floor+o.uuid;if(!instances.has(key))instances.set(key,{geometry:o.geometry,material:o.material,floor:p.floor,matrices:[]});instances.get(key).matrices.push(transform.clone().multiply(o.matrixWorld));});}
       for(const b of instances.values()){const mesh=new THREE.InstancedMesh(b.geometry,b.material,b.matrices.length);b.matrices.forEach((v,i)=>mesh.setMatrixAt(i,v));mesh.computeBoundingSphere();mesh.castShadow=mesh.receiveShadow=true;groups[b.floor].add(mesh);keep(mesh);}
       if(name==='pipe_rack')rackFallbacks.forEach(g=>g.visible=false);else for(const o of equipment.filter(e=>e.asset==='dock'))fallbacks.get(o).visible=false;
+    }
+    if(path==='fitout'){
+      const instances=new Map();gltf.scene.updateMatrixWorld(true);
+      for(const p of fitoutPlacements[name]){const transform=new THREE.Matrix4().compose(new THREE.Vector3(...p.position),new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),p.yaw||0),new THREE.Vector3(...p.scale));
+        gltf.scene.traverse(o=>{if(!o.isMesh)return;const key=p.floor+o.uuid;if(!instances.has(key))instances.set(key,{geometry:o.geometry,material:o.material,floor:p.floor,matrices:[]});instances.get(key).matrices.push(transform.clone().multiply(o.matrixWorld));});if(p.fallback)p.fallback.visible=false;}
+      for(const b of instances.values()){const mesh=new THREE.InstancedMesh(b.geometry,b.material,b.matrices.length);b.matrices.forEach((matrix,i)=>mesh.setMatrixAt(i,matrix));mesh.computeBoundingSphere();mesh.castShadow=mesh.receiveShadow=true;groups[b.floor].add(mesh);keep(mesh);}
     }
     if(path==='services'){
       const instances=new Map(),connectors=new Map();gltf.scene.updateMatrixWorld(true);
@@ -191,5 +200,5 @@ export function createReplayEnvironment(scene,resources,locations,onAssets=()=>{
     if(name==='industrial_pipes_pack'){const junction=find('Cylinder_011')||find('Cylinder.011');if(junction)for(const o of equipment.filter(e=>e.asset==='pipes'))fit(junction,o,[1.1,.65,1],1.2);}
     // The exterior factory shell is deliberately not placed: the reference defines no yard.
   }catch(e){failed.push(name);console.warn('Industrial component unavailable:',name,e.message);}finally{if(!disposed)onAssets({loaded:++count,total:names.length,failed:[...failed]});}});
-  return {solids,groups,setRoof:(mode,cameraMode,dt)=>{const open=mode!=='full'||cameraMode==='top';upperWalls.forEach(o=>{o.visible=!open;});Object.values(roofGroups).forEach(o=>{o.visible=mode!=='hidden'&&mode!=='overhead'&&cameraMode!=='top';});decks.forEach(({root,material})=>{const alpha=open?0:1;material.opacity+=(alpha-material.opacity)*(1-Math.exp(-dt*12));material.transparent=material.opacity<.99;material.depthWrite=material.opacity>.99;root.visible=material.opacity>.01;});solids.filter(o=>o.userData.type==='wall').forEach(o=>{o.scale.y=open?1.35:o.userData.exterior?7.4:3.5;o.position.y=o.scale.y/2;});},setFloor:f=>Object.entries(groups).forEach(([id,g])=>{g.visible=f==='all'||f===id;}),ready:Promise.all(jobs),dispose:()=>{disposed=true;}};
+  return {solids,groups,fitout,setRoof:(mode,cameraMode,dt)=>{const open=mode!=='full'||cameraMode==='top';upperWalls.forEach(o=>{o.visible=!open;});Object.values(roofGroups).forEach(o=>{o.visible=mode!=='hidden'&&mode!=='overhead'&&cameraMode!=='top';});decks.forEach(({root,material})=>{const alpha=open?0:1;material.opacity+=(alpha-material.opacity)*(1-Math.exp(-dt*12));material.transparent=material.opacity<.99;material.depthWrite=material.opacity>.99;root.visible=material.opacity>.01;});solids.filter(o=>o.userData.type==='wall').forEach(o=>{o.scale.y=open?1.35:o.userData.exterior?7.4:3.5;o.position.y=o.scale.y/2;});},setFloor:f=>Object.entries(groups).forEach(([id,g])=>{g.visible=f==='all'||f===id;}),ready:Promise.all(jobs),dispose:()=>{disposed=true;}};
 }
