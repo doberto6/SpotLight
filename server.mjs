@@ -1,27 +1,46 @@
-import {handleML} from './ml-queries.mjs';
-import {handleSpotTalk} from './spot-talk.mjs';
+import {handleML,mlQueries} from './ml-queries.mjs';
+import {handleSpotTalk,askSpotTalk} from './spot-talk.mjs';
+import {createDataGateway} from './data-gateway.mjs';
+import {createDemoData,validId,validConfiguration} from './demo-data.mjs';
 import {features} from './intelligence-queries.mjs';
-import http from 'node:http';import fs from 'node:fs';import path from 'node:path';import {loadData,kit,hotspotSQL} from './data.mjs';
-import {queries} from './databricks.mjs';
+import http from 'node:http';import fs from 'node:fs';import path from 'node:path';import {loadData,kit} from './data.mjs';
+import {queries,warehouseHealth} from './databricks.mjs';
 if(fs.existsSync('.env'))process.loadEnvFile('.env');
 const data=loadData();
-async function intelligence(){const {DATABRICKS_HOST:host,DATABRICKS_TOKEN:token,DATABRICKS_WAREHOUSE_ID:warehouse}=process.env;
- if(!host||!token||!warehouse)return {source:'Local CSV analytics',configured:false,rows:data.metrics.byLocation};
- const base=new URL(host.startsWith('https://')?host:'https://'+host);if(base.protocol!=='https:')throw Error('Databricks requires HTTPS');
- const headers={'Authorization':'Bearer '+token,'Content-Type':'application/json'};
- const request=async(url,options)=>{const r=await fetch(url,{...options,headers,signal:AbortSignal.timeout(35000)});if(!r.ok)throw Error('Databricks request failed (HTTP '+r.status+')');return r.json();};
- let result=await request(new URL('/api/2.0/sql/statements',base),{method:'POST',body:JSON.stringify({warehouse_id:warehouse,statement:hotspotSQL(process.env.DATABRICKS_CATALOG||'main',process.env.DATABRICKS_SCHEMA||'spotlight'),wait_timeout:'10s',disposition:'INLINE',format:'JSON_ARRAY'})});
- for(let attempt=0;['PENDING','RUNNING'].includes(result.status?.state)&&attempt<15;attempt++){await new Promise(r=>setTimeout(r,1000));result=await request(new URL('/api/2.0/sql/statements/'+encodeURIComponent(result.statement_id),base),{});}
- if(result.status?.state!=='SUCCEEDED')throw Error('Databricks query did not succeed: '+result.status?.state);
- if(result.result?.next_chunk_index!=null||result.manifest?.truncated)throw Error('Query returned more rows than the inline response supports');
- const cols=result.manifest.schema.columns.map(c=>c.name);const rows=(result.result?.data_array||[]).map(r=>Object.fromEntries(cols.map((c,i)=>[c,r[i]]))).map(r=>({key:r.location_id,total:Number(r.total),failed:Number(r.failed),failureRate:Number(r.failed)/Number(r.total)*100}));
- return {source:'Databricks SQL warehouse',configured:true,statementId:result.statement_id,rows};}
+const demo=createDemoData(data);
+const gateway=createDataGateway({health:warehouseHealth,mode:process.env.SPOTLIGHT_DATA_MODE||'auto'});
 const production=process.argv.includes('--production');if(production&&!fs.existsSync('dist/index.html'))throw Error('Run npm run build before npm start');const vite=production?null:await (await import('vite')).createServer({server:{middlewareMode:true,hmr:false},appType:'spa'});
-const server=http.createServer(async(req,res)=>{try{const url=new URL(req.url,'http://localhost');if(url.pathname.startsWith('/api/ml/'))return await handleML(req,res,url);if(url.pathname==='/api/spot-talk')return await handleSpotTalk(req,res);const featureRoutes={'/api/databricks/risk':()=>features.risk(url.searchParams.get('configuration')),'/api/databricks/waypoint':()=>features.waypoint(url.searchParams.get('location'),url.searchParams.get('configuration')),'/api/databricks/sensor-trends':features.trends,'/api/databricks/mission-report':()=>features.report(url.searchParams.get('mission'))};if(featureRoutes[url.pathname]){res.setHeader('Content-Type','application/json');res.setHeader('Cache-Control','no-store');return res.end(JSON.stringify(await featureRoutes[url.pathname]()));}if(url.pathname==='/api/health'){res.setHeader('Content-Type','application/json');return res.end(JSON.stringify({status:'ok',uptime_seconds:Math.round(process.uptime()),checked_at:new Date().toISOString()}));}if(url.pathname==='/api/databricks/overview'){res.setHeader('Content-Type','application/json');return res.end(JSON.stringify(await queries.overview()));}if(url.pathname==='/api/databricks/evidence'){res.setHeader('Content-Type','application/json');return res.end(JSON.stringify(await queries.evidence(url.searchParams.get('kind'),url.searchParams.get('id'))));}if(url.pathname==='/api/data'){res.setHeader('Content-Type','application/json');return res.end(JSON.stringify(data));}const dbRoutes={'/api/databricks/health':queries.health,'/api/databricks/missions':queries.missions,'/api/databricks/hidden-failures':queries.hiddenFailures,'/api/databricks/hotspots':queries.hotspots,'/api/databricks/anomalies':queries.anomalies,'/api/databricks/reliability':queries.reliability};if(dbRoutes[url.pathname]){res.setHeader('Content-Type','application/json');return res.end(JSON.stringify({source:'Databricks SQL connector',rows:await dbRoutes[url.pathname]()}));}if(url.pathname==='/api/intelligence'){res.setHeader('Content-Type','application/json');return res.end(JSON.stringify(await intelligence()));}
+const server=http.createServer(async(req,res)=>{try{
+ const url=new URL(req.url,'http://localhost');
+ const send=value=>{res.setHeader('Content-Type','application/json');res.setHeader('Cache-Control','no-store');return res.end(JSON.stringify(value));};
+ const run=(live,fallback)=>gateway.run(live,fallback,res);
+ if(url.pathname.startsWith('/api/ml/')){
+  const safe=Object.fromEntries(Object.keys(mlQueries).map(key=>[key,(...args)=>run(()=>mlQueries[key](...args),()=>demo.ml[key](...args))]));
+  return await handleML(req,res,url,safe);
+ }
+ if(url.pathname==='/api/spot-talk')return await handleSpotTalk(req,res,input=>run(()=>askSpotTalk(input),()=>demo.chat(input)));
+ if(url.pathname==='/api/data-mode')return send(await gateway.status(url.searchParams.get('refresh')==='true'));
+ if(url.pathname==='/api/health')return send({status:'ok',uptime_seconds:Math.round(process.uptime()),checked_at:new Date().toISOString()});
+ if(url.pathname==='/api/databricks/health')return send({source:'Databricks status API',rows:await queries.health()});
+ if(url.pathname==='/api/data')return send(data);
+ const configuration=url.searchParams.get('configuration');
+ const featureRoutes={
+  '/api/databricks/risk':()=>{validConfiguration(configuration);return run(()=>features.risk(configuration),()=>demo.risk(configuration));},
+  '/api/databricks/waypoint':()=>{const id=validId(url.searchParams.get('location'));validConfiguration(configuration);return run(()=>features.waypoint(id,configuration),()=>demo.waypoint(id,configuration));},
+  '/api/databricks/sensor-trends':()=>run(features.trends,demo.trends),
+  '/api/databricks/mission-report':()=>{const id=validId(url.searchParams.get('mission'));return run(()=>features.report(id),()=>demo.report(id));},
+  '/api/databricks/overview':()=>run(queries.overview,demo.overview),
+  '/api/databricks/evidence':()=>{const kind=url.searchParams.get('kind'),id=validId(url.searchParams.get('id'));if(!['mission','waypoint','action'].includes(kind))throw Object.assign(Error('Invalid evidence selection'),{status:400});return run(()=>queries.evidence(kind,id),()=>demo.evidence(kind,id));}
+ };
+ if(featureRoutes[url.pathname])return send(await featureRoutes[url.pathname]());
+ const dbRoutes={'/api/databricks/missions':'missions','/api/databricks/hidden-failures':'hiddenFailures','/api/databricks/hotspots':'hotspots','/api/databricks/anomalies':'anomalies','/api/databricks/reliability':'reliability'};
+ const key=dbRoutes[url.pathname];
+ if(key){const rows=await run(queries[key],demo[key]);return send({source:res.getHeader('X-SPOTlight-Data-Mode')==='demo'?demo.source:'Databricks SQL connector',rows});}
+ if(url.pathname==='/api/intelligence')return send(await run(async()=>({source:'Databricks SQL connector',rows:(await queries.hotspots()).map(r=>({...r,key:r.location_id,failureRate:r.failure_rate}))}),()=>({source:demo.source,rows:data.metrics.byLocation})));
  if(url.pathname.startsWith('/kit-assets/')){const relative=decodeURIComponent(url.pathname.slice(12));const root=path.join(kit,'04_ASSETS');const file=path.resolve(root,relative);if(!file.startsWith(root+path.sep)||!fs.existsSync(file)||!fs.statSync(file).isFile()){res.statusCode=404;return res.end('Not found');}res.setHeader('Content-Type',file.endsWith('.png')?'image/png':'image/jpeg');return fs.createReadStream(file).pipe(res);}
  if(vite)return vite.middlewares(req,res);
  let file=path.resolve('dist','.'+url.pathname);if(!file.startsWith(path.resolve('dist')+path.sep)||!fs.existsSync(file)||!fs.statSync(file).isFile())file=path.resolve('dist/index.html');res.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.css')?'text/css':'text/html');fs.createReadStream(file).pipe(res);
- }catch(e){res.statusCode=502;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({error:e.message}));}});
+ }catch(e){res.statusCode=e.status||502;res.setHeader('Content-Type','application/json');res.end(JSON.stringify({error:e.message}));}});
 
 const port=Number(process.env.PORT||3000);
 server.listen(port,()=>console.log(`SPOTlight running at http://localhost:${port}`));

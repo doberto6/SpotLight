@@ -83,7 +83,7 @@ export async function askSpotTalk(input,{runQuery=query,fetcher=fetch}={}){
 }
 
 let active=0;
-export async function handleSpotTalk(req,res){
+export async function handleSpotTalk(req,res,ask=askSpotTalk){
   res.setHeader('Content-Type','application/json');res.setHeader('Cache-Control','no-store');
   if(req.method!=='POST'){res.statusCode=405;res.setHeader('Allow','POST');return res.end(JSON.stringify({error:'Use POST to ask Spot Talk.'}));}
   if(req.headers.origin&&new URL(req.headers.origin).host!==req.headers.host){res.statusCode=403;return res.end(JSON.stringify({error:'Spot Talk accepts requests from this application only.'}));}
@@ -91,5 +91,5 @@ export async function handleSpotTalk(req,res){
   let body='',size=0;
   for await(const chunk of req){size+=chunk.length;if(size>32000){res.statusCode=413;return res.end(JSON.stringify({error:'Conversation is too large. Start a new chat.'}));}body+=chunk;}
   let input;try{input=validateChat(JSON.parse(body));}catch(e){res.statusCode=400;return res.end(JSON.stringify({error:e instanceof SyntaxError?'Invalid request JSON.':e.message}));}
-  active++;try{res.end(JSON.stringify(await askSpotTalk(input)));}catch(e){res.statusCode=502;res.end(JSON.stringify({error:e.message}));}finally{active--;}
+  active++;try{res.end(JSON.stringify(await ask(input)));}catch(e){res.statusCode=502;res.end(JSON.stringify({error:e.message}));}finally{active--;}
 }

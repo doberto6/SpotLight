@@ -1,6 +1,6 @@
 # Next Inspection Risk Forecast
 
-Open **Intelligence → Predictive Intelligence**. All displayed estimates and model metrics come from Databricks, through the existing Node backend. Select a candidate or a floorplan marker for the model explanation, actual historical failed-action records, reports, or the 3D map. The map switches between dashed predicted-risk markers and solid historical-rate markers. Each predicted waypoint marker represents its highest-risk candidate, not the average risk of everything at that waypoint.
+Open **Intelligence → Predictive Intelligence**. In live mode, displayed estimates and model metrics come from Databricks through the existing Node backend. Offline mode shows a clearly labeled saved demo snapshot with original validation metrics. Select a candidate or a floorplan marker for the model explanation, actual historical failed-action records, reports, or the 3D map. The map switches between dashed predicted-risk markers and solid historical-rate markers. Each predicted waypoint marker represents its highest-risk candidate, not the average risk of everything at that waypoint.
 
 This is an **experimental model of inspection action failure**, not a prediction of physical equipment failure or an explanation of its cause. The source is synthetic hackathon data. Current validation caught none of six held-out failures at the predefined 30% review threshold. ROC-AUC was 0.491. The dashboard prominently shows this limitation; lower risk cannot be used to rule out failure.
 
@@ -78,6 +78,6 @@ WHERE model_version = (
 ORDER BY predicted_failure_probability DESC;
 ```
 
-The dashboard's `/api/ml/overview` returns exactly the stored model metrics and forecast payloads. Inspect the network response and compare its model version/estimates with the SQL results. API endpoints: `GET /api/ml/status`, `/api/ml/predictions`, `/api/ml/predictions/WP09`, `/api/ml/metrics`, and `/api/ml/overview`. Missing model tables show a setup/empty state. Connection or query failures return a clear HTTP 502 error; no CSV, random, or mock prediction fallback exists.
+The dashboard's `/api/ml/overview` returns exactly the stored model metrics and forecast payloads. Inspect the network response and compare its model version/estimates with the SQL results. API endpoints: `GET /api/ml/status`, `/api/ml/predictions`, `/api/ml/predictions/WP09`, `/api/ml/metrics`, and `/api/ml/overview`. Missing model tables show a setup/empty state. In the default auto mode, connection or query failures use the saved demo forecast snapshot documented in ../data/demo/README.md. The dashboard labels the snapshot explicitly; no new training is implied. Set SPOTLIGHT_DATA_MODE=live for HTTP 502 errors instead of fallback. Training and publication always require real Databricks data.
 
 Tests: `npm test` for existing app/ML API validation, and `npm run ml:test` for chronological splitting, strict historical timing, probability validation, and exact contribution reconstruction. Real training separately audits SQL feature rows against Databricks history.

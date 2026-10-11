@@ -1,3 +1,4 @@
+import {DemoNotice} from './DataMode.jsx';
 import React,{useEffect,useMemo,useRef,useState} from 'react';
 import {api} from './api.mjs';
 import {waypointPositions as positions} from './facility-layout.mjs';
@@ -23,9 +24,9 @@ export default function PredictiveIntelligence({onMap,onMission}){
  return <section className="predictive-workspace" aria-labelledby="predictive-heading">
   <div className="panel ml-intro"><div><small>LOOK AHEAD / INSPECTION RELIABILITY</small><h2 id="predictive-heading">Predictive Intelligence</h2><p>Which inspection should get a closer look?</p></div><button onClick={()=>setRetry(v=>v+1)} disabled={!data&&!error}>Refresh forecasts</button></div>
   {!data&&!error&&<section className="panel" role="status">Loading trained-model forecasts from Databricks…</section>}
-  {error&&<section className="panel" role="alert"><h3>Forecasts unavailable</h3><p className="red">{error}</p><p className="muted">Check System Health and the ML setup. No substitute predictions are shown.</p></section>}
+  {error&&<section className="panel" role="alert"><h3>Forecasts unavailable</h3><p className="red">{error}</p><p className="muted">Check System Health and the ML setup. The demo snapshot could not be loaded.</p></section>}
   {data&&!model&&<section className="panel"><h3>No trained model yet</h3><p>{data.status.message}</p><p className="muted">The setup and training steps are in README.md.</p></section>}
-  {model&&<>
+  {model&&<><DemoNotice data={data} forecast/>
    <div className="ml-notice"><b>Experimental estimates</b><span>Trained on synthetic inspection records. These scores estimate an inspection action failing; contributing factors show associations, not fault causes.</span></div>
    {data.status.stale&&<div className="ml-stale" role="alert">Source records changed since training. These forecasts are out of date; retrain before using them.</div>}
    {model.evaluation.recall===0&&<div className="ml-stale" role="note"><b>Failure detection has not been validated.</b> At the 30% review threshold, this model caught none of the {model.evaluation.failure_count} failed actions in the {model.test_count}-action holdout. Use these estimates to explore history, not to rule out failures.</div>}
