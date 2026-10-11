@@ -122,7 +122,7 @@ Tables join on mission_id, action_id, location_id and asset_id. Loader validates
 - `tests/data.test.mjs`: meaningful data correctness tests.
 - `databricks/analytics.sql`: warehouse query for sponsor setup.
 
-Next team work: configure and verify Databricks, replace browser-local follow-up with a shared database, add authentication before exposing the server remotely, and extend ingestion to new mission files. The server binds to localhost for this MVP.
+Next team work: configure and verify Databricks, replace browser-local follow-up with a shared database, add authentication for operator access, and extend ingestion to new mission files. The combined local server binds to localhost; the Vercel API uses a separate HTTP entrypoint.
 
 Databricks API reference: https://docs.databricks.com/api/statement-execution/v1/statement-execution
 
@@ -183,3 +183,32 @@ To restore live data, set `SPOTLIGHT_DATA_MODE=auto`, configure backend credenti
 `GET /api/data-mode` reports passive availability; `?refresh=true` bypasses the status cache. Dashboard responses carry `X-SPOTlight-Data-Mode: live|demo`; object responses include source labels where applicable. Health endpoints always report actual backend/Databricks availability and never fabricate a healthy connection. SQL setup and ML training/publication commands remain live-only and never write demo results into Databricks.
 
 Verification: `npm test` checks stopped/starting/unavailable and forced-demo behavior, zero SQL calls in offline mode, recovery, live-only errors, demo record counts, sensor baseline/recurrence rules, snapshot integrity and chat citations. `npm run build` verifies the frontend.
+
+## Vercel deployment with services
+
+The root `vercel.json` defines two services using Node.js 22:
+
+- `app`: Vite frontend, public on `/` and other non-API paths, including `/kit-assets/` and `/brand/`.
+- `api`: Node.js HTTP server at `services/api.mjs`, public on `/api/*`. Rewrites preserve the `/api/` prefix expected by the existing handlers.
+
+`server.mjs` and the Vercel entrypoint share `http-api.mjs`, so the existing local development command, replay, analytics, reports, and Spot Talk keep the same routes. The frontend build copies challenge floor plans and inspection images into `dist/kit-assets`. API function packaging includes the raw CSVs and the saved demo forecast. The app continues to use relative `/api/...` URLs; no localhost address is embedded in the deployed client.
+
+There are no internal HTTP service calls and therefore no service bindings. The browser calls the public `api` service. Databricks is an external provider, not a Vercel service. The `ml/` directory contains batch training scripts rather than a Python web server; run `npm run ml:train` separately to publish predictions to Databricks. Online prediction endpoints already run in the Node API. Adding a Python inference service later would require an HTTP entrypoint and an API-to-ML binding, configured on the calling `api` service.
+
+### Test locally
+
+1. Install dependencies with `npm install`.
+2. For an offline check, set `SPOTLIGHT_DATA_MODE=demo` in your local `.env`. For live operation, use the backend variables in `.env.example`.
+3. Run `npx vercel@latest dev --local --listen 3100 --yes` and open `http://localhost:3100`. This runs both services without linking a Vercel account. Use `npx vercel@latest dev` once the project is linked to load its Vercel settings.
+4. Check `/api/health`, `/api/data`, the Intelligence and Reports tabs, floor-plan imagery, and Spot Talk. Run `npm test` and `npm run build` for regression and build checks.
+
+### Deploy after confirming the service layout
+
+1. Import this GitHub repository into Vercel and leave the project root at the repository root. Vercel reads the service-specific commands from `vercel.json`; do not add top-level build/runtime overrides.
+2. In project Settings → Environment Variables, configure the backend variables documented in `.env.example` for the deployment environments you use. Use `SPOTLIGHT_DATA_MODE=demo` for an entirely offline demo, or `auto` with Databricks credentials for live data with labeled fallback. Configure the existing Spot Talk serving-endpoint variables for live AI responses.
+3. Credentials belong in Vercel environment settings, never in `VITE_*` variables or committed `.env` files. `.vercelignore` excludes local secrets, virtual environments, and generated output. No bound service URL variables need to be set for the current layout.
+4. Deploy the confirmed configuration, then check `/api/health` and System Health before testing Intelligence, Reports, mapping, and chat. Changing environment settings requires another deployment.
+
+Spot Talk recognizes the public host forwarded by Vercel while retaining its browser-origin check. Service URLs are resolved at runtime; the static frontend does not depend on build-time bindings. Local multi-service checks do not certify a cloud deployment or a live Databricks connection.
+
+Reference: [Vercel Services](https://vercel.com/docs/services), [service routing](https://vercel.com/docs/services/routing), and [bindings](https://vercel.com/docs/services/bindings).

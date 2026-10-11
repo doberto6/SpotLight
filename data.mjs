@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-export const kit=path.resolve('data/SPOT_KnightHacks_Challenge_Kit Part One');
+import {fileURLToPath} from 'node:url';
+export const kit=path.resolve(fileURLToPath(new URL('./data/SPOT_KnightHacks_Challenge_Kit Part One/',import.meta.url)));
 export function parseCSV(text) {
  const rows=[]; let row=[], cell='', quoted=false;
  for(let i=0;i<text.length;i++){const c=text[i]; if(c==='"'){if(quoted&&text[i+1]==='"'){cell+='"';i++;}else quoted=!quoted;}else if(c===','&&!quoted){row.push(cell);cell='';}else if(c==='\n'&&!quoted){row.push(cell.replace(/\r$/,''));rows.push(row);row=[];cell='';}else cell+=c;}

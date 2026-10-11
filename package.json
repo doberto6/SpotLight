@@ -5,13 +5,16 @@
   "type": "module",
   "scripts": {
     "dev": "node server.mjs",
-    "build": "vite build",
+    "build": "node scripts/build-frontend.mjs",
     "test": "node --test",
     "databricks:setup": "node databricks/setup.mjs",
     "start": "node server.mjs --production",
     "ml:train": "node scripts/ml-run.mjs",
     "ml:inspect": "node scripts/ml-inspect.mjs",
     "ml:test": "node scripts/ml-validate.mjs"
+  },
+  "engines": {
+    "node": "22.x"
   },
   "dependencies": {
     "@databricks/sql": "^2.2.0",

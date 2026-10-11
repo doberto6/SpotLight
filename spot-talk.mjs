@@ -83,10 +83,21 @@ export async function askSpotTalk(input,{runQuery=query,fetcher=fetch}={}){
 }
 
 let active=0;
+export function sameOrigin(req,{trustedProxy=Boolean(process.env.VERCEL||process.env.VERCEL_DEV_PORT)}={}){
+  if(!req.headers.origin)return true;
+  try{
+    const origin=new URL(req.headers.origin);
+    if(!['http:','https:'].includes(origin.protocol))return false;
+    // Vercel's services router changes Host to the internal service address.
+    // Forwarding headers are trusted only inside the Vercel runtime/dev runner.
+    const forwarded=trustedProxy&&(req.headers['x-forwarded-host']||req.headers['x-vercel-deployment-url']);
+    return origin.host===(forwarded||req.headers.host);
+  }catch{return false;}
+}
 export async function handleSpotTalk(req,res,ask=askSpotTalk){
   res.setHeader('Content-Type','application/json');res.setHeader('Cache-Control','no-store');
   if(req.method!=='POST'){res.statusCode=405;res.setHeader('Allow','POST');return res.end(JSON.stringify({error:'Use POST to ask Spot Talk.'}));}
-  if(req.headers.origin&&new URL(req.headers.origin).host!==req.headers.host){res.statusCode=403;return res.end(JSON.stringify({error:'Spot Talk accepts requests from this application only.'}));}
+  if(!sameOrigin(req)){res.statusCode=403;return res.end(JSON.stringify({error:'Spot Talk accepts requests from this application only.'}));}
   if(active>=2){res.statusCode=429;return res.end(JSON.stringify({error:'Spot Talk is busy. Please retry in a moment.'}));}
   let body='',size=0;
   for await(const chunk of req){size+=chunk.length;if(size>32000){res.statusCode=413;return res.end(JSON.stringify({error:'Conversation is too large. Start a new chat.'}));}body+=chunk;}
